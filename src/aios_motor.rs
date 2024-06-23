@@ -1,0 +1,405 @@
+use crate::socket::Socket;
+use nix::Result as Res;
+use std::net::Ipv4Addr;
+use serde_json::Value as JSVal;
+use crate::serde::*;
+use serde::Deserialize;
+
+pub struct AiosMotor<const R: usize, const W: usize> {
+    socket: Socket<R>,
+    write_buf: [u8; W],
+}
+
+struct SerCounter<'a> {
+    count: usize,
+    writer: std::io::BufWriter<&'a mut [u8]>,
+}
+
+impl <'a> SerCounter<'a> {
+    fn new(buf: &'a mut [u8]) -> Self {
+        let writer = std::io::BufWriter::new(buf);
+
+        Self {
+            count: 0,
+            writer,
+        }
+    }
+}
+
+impl <'a> std::io::Write for SerCounter<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let len = self.writer.write(buf)?;
+        self.count += len;
+        Ok(len)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.writer.flush()
+    }
+}
+
+impl <const R: usize, const W: usize> AiosMotor<R, W> {
+    pub const SERVICE_PORT: u16 = 2334;
+    pub const DATA_PORT: u16 = 2333;
+
+    pub fn from_socket(socket: Socket<R>) -> Self {
+        let write_buf = [0u8; W];
+        Self {
+            write_buf,
+            socket,
+        }
+    }
+
+    pub fn from_ip(a: u8, b: u8, c: u8, d: u8) -> Res<Self> {
+        Ok(Self::from_socket(Socket::new(a, b, c, d)?))
+    }
+
+    pub fn from_addr(addr: Ipv4Addr) -> Res<Self> {
+        Ok(Self::from_socket(Socket::from_ipv4(addr)?))
+    }
+
+    pub fn from_octets([a, b, c, d]: [u8; 4]) -> Res<Self> {
+        Self::from_ip(a, b, c, d)
+    }
+
+    pub fn send_recv<'a>(&'a mut self, value: &JSVal, port: u16) -> Result<&'a [u8], Err> {
+        let bytes = serialize_cmd(&mut self.write_buf, value)?;
+        self.socket.send_raw(bytes, port)?;
+        Ok(self.socket.recv_raw()?)
+    }
+
+    pub fn send_recv_service<'a>(&'a mut self, value: &JSVal) -> Result<&'a [u8], Err> {
+        Ok(self.send_recv(value, Self::SERVICE_PORT)?)
+    }
+    
+    pub fn send_recv_data<'a>(&'a mut self, value: &JSVal) -> Result<&'a [u8], Err> {
+        Ok(self.send_recv(value, Self::DATA_PORT)?)
+    }
+
+    pub unsafe fn send_recv_parse<'a, T: Deserialize<'a> + 'a>(&'a mut self, cmd: JSVal, port: u16) -> Result<Request<T>, Err> {
+        let bytes = self.send_recv(&cmd, port)?;
+        let str = unsafe { std::str::from_utf8_unchecked(bytes) };
+        let data: Request<T> = serde_json::from_str(str)?;
+        Ok(data)
+    }
+
+    pub unsafe fn send_recv_parse_service<'a, T: Deserialize<'a> + 'a>(&'a mut self, cmd: JSVal) -> Result<Request<T>, Err> {
+        self.send_recv_parse(cmd, Self::SERVICE_PORT)
+    }
+
+    pub unsafe fn send_recv_parse_data<'a, T: Deserialize<'a> + 'a>(&'a mut self, cmd: JSVal) -> Result<Request<T>, Err> {
+        self.send_recv_parse(cmd, Self::DATA_PORT)
+    }
+
+    pub fn set_axis_state(&mut self, state: AxisState) -> Result<(), Err> {
+        let req_state: u8 = state.into();
+
+        let cmd = serde_json::json!({
+            "method": "SET",
+            "reqTarget": "/m1/requested_state",
+            "property": req_state,
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<RequestedState>(cmd)? };
+        let state = data.data.current_state;
+
+        if state != req_state {
+            panic!("incorrect state assigned {state}, tried {req_state}");
+        }
+        Ok(())
+    }
+
+    pub fn enable(&mut self) -> Result<(), Err> {
+        self.set_axis_state(AxisState::Enable)
+    }
+
+    pub fn disable(&mut self) -> Result<(), Err> {
+        self.set_axis_state(AxisState::Idle)
+    }
+
+    pub fn is_encoder_ready(&mut self) -> Result<bool, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/m1/encoder/is_ready",
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<Property<bool>>(cmd)? };
+        Ok(data.data.property)
+    }
+
+    pub fn initalize(&mut self) -> Result<(), Err> {
+        while !self.is_encoder_ready()? {}
+
+        self.enable()?;
+        Ok(())
+    }
+
+    pub fn shutdown(&mut self) -> Result<(), Err> {
+        self.disable()
+    }
+    //NOTE: i would not use this unless absolutely necessary
+    pub fn reboot(&mut self) -> Result<(), Err> {
+        let cmd = serde_json::json!({
+            "method": "SET",
+            "reqTarget": "/",
+            "property": "reboot",
+
+        });
+
+        let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
+        Ok(())
+    }
+
+    // NOTE: i would not use this unless absolutely necessary
+    // this will not do anything until `reboot` is called
+    // and even then i(will)dk if that fixes it completely.
+    pub unsafe fn reboot_motor_drive(&mut self) -> Result<(), Err> {
+        let cmd = serde_json::json!({
+            "method": "SET",
+            "reqTarget": "/",
+            "property": "reboot_motor_drive",
+
+        });
+
+        let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
+        Ok(())
+    }
+
+    pub fn complete_reboot(&mut self) -> Result<(), Err> {
+        unsafe { self.reboot_motor_drive()? };
+        self.reboot()?;
+        Ok(())
+    }
+
+    pub fn get_state(&mut self) -> Result<RequestedState, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/m1/requested_state",
+        });
+        let data = unsafe { self.send_recv_parse_service::<RequestedState>(cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn set_control_mode(&mut self, control_mode: ControlMode) -> Result<(), Err> {
+        let ctrl: u8 = control_mode.into();
+        let cmd = serde_json::json!({
+            "method": "SET",
+            "reqTarget": "/m1/controller/config",
+            "control_mode": ctrl,
+        });
+
+        let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
+        Ok(())
+    }
+
+    pub fn set_linear_count(&mut self, linear_count: u8) -> Result<(), Err> {
+        let cmd = serde_json::json!({
+            "method": "SET",
+            "reqTarget": "/m1/encoder",
+            "set_linear_count": linear_count,
+        });
+        let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
+        Ok(())
+    }
+    
+    pub fn current_velocity_position(&mut self) -> Result<CVP, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/m1/CVP",
+        });
+
+        let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn controller_config(&mut self) -> Result<ControllerConfig, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/m1/controller/config",
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<ControllerConfigRaw>(cmd)? };
+        Ok(data.data.into())
+    }
+
+    pub fn err(&mut self) -> Result<MotorError, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/m1/error",
+
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<MotorErrorRaw>(cmd)? };
+        let data: MotorError = data.data.into();
+        Ok(data)
+    }
+
+    pub fn clear_err(&mut self) -> Result<MotorError, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/m1/error",
+            "clear_error": true,
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<MotorErrorRaw>(cmd)? };
+        let data: MotorError = data.data.into();
+        Ok(data)
+    }
+
+    pub fn set_velocity(&mut self, velocity: f64, current_ff: f64) -> Result<CVP, Err> {
+        let cmd = serde_json::json!({
+            "method": "SET",
+            "reqTarget": "/m1/setVelocity",
+            "velocity": velocity,
+            "current_ff": current_ff,
+            "reply_enable": true,
+        });
+
+        let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn set_position(&mut self, position: f64, velocity: f64, current_ff: f64) -> Result<CVP, Err> {
+        let cmd = serde_json::json!({
+            "method": "SET",
+            "reqTarget": "/m1/setPosition",
+            "velocity": velocity,
+            "current_ff": current_ff,
+            "position": position,
+            "reply_enable": true,
+        });
+
+        let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn set_current(&mut self, current: f64) -> Result<CVP, Err> {
+        let cmd = serde_json::json!({
+            "method": "SET",
+            "reqTarget": "/m1/setCurrent",
+            "current": current,
+        });
+
+        let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn idle(&mut self) -> Result<(), Err> {
+        let _ = self.set_velocity(0.0, 0.0)?;
+        Ok(())
+    }
+
+    pub fn get_root(&mut self) -> Result<RootInfo, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/",
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<RootInfo>(cmd)? };
+        Ok(data.data)
+    }
+
+    //FIXME: theres also set, save, and erase config
+    //which have not been implemented
+    pub fn get_root_config(&mut self) -> Result<RootConfig, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/config",
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<RootConfig>(cmd)? };
+        Ok(data.data)
+    }    
+
+    pub fn get_network_settings(&mut self) -> Result<NetworkSettings, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/network_setting",
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<NetworkSettings>(cmd)? };
+        Ok(data.data)
+    }
+
+    //FIXME: theres also a set motor config
+    //which has not been implemented
+    pub fn motor_config(&mut self) -> Result<MotorConfig, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/m1/motor/config",
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<MotorConfig>(cmd)? };
+        Ok(data.data)
+    }
+
+    //FIXME: this also has a set
+    //which has not been implemented
+    pub fn trapezoidal_trajectory(&mut self) -> Result<TrapezoidalTrajectory, Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": "/m1/trap_traj",
+        });
+
+        let data = unsafe { self.send_recv_parse_service::<TrapezoidalTrajectory>(cmd)? };
+        Ok(data.data)
+    }
+
+    /// all this does is print out the response from the given endpoint and port
+    pub fn test_endpoint(&mut self, ep: &str, port: u16) -> Result<(), Err> {
+        let cmd = serde_json::json!({
+            "method": "GET",
+            "reqTarget": ep,
+        });
+
+        let bytes = self.send_recv(&cmd, port)?;
+
+        let s = unsafe { std::str::from_utf8_unchecked(bytes) };
+        println!("\n{s}\n");
+        Ok(())
+    }
+}
+
+impl <const R: usize, const W: usize> std::os::fd::AsRawFd for AiosMotor<R, W> {
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        self.socket.as_raw_fd()
+    }
+}
+
+impl <const R: usize, const W: usize> Drop for AiosMotor<R, W> {
+    fn drop(&mut self) {
+        let _ = self.disable();
+    }
+}
+
+impl From<serde_json::Error> for Err {
+    fn from(err: serde_json::Error) -> Err {
+        Err::Serde(err)
+    }
+}
+
+impl From<nix::Error> for Err {
+    fn from(err: nix::Error) -> Err {
+        Err::Io(err)
+    }
+}
+
+pub enum Err {
+    Serde(serde_json::Error),
+    Io(nix::Error),
+}
+
+fn serialize_cmd<'a>(buf: &'a mut [u8], val: &JSVal) -> Result<&'a [u8], serde_json::Error> {
+    let writer = SerCounter::new(buf);
+    use serde::Serialize;
+    let mut ser = serde_json::Serializer::new(writer);
+
+    val.serialize(&mut ser)?;
+
+    let len = ser.into_inner().count;
+    let ptr = buf.as_ptr();
+
+    let data = unsafe { core::slice::from_raw_parts(ptr, len) };
+
+    Ok(data)
+}
