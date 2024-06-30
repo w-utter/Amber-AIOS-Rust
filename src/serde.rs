@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use core::marker::PhantomData;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct Request<'a, T>
@@ -10,7 +10,7 @@ where
     pub data: T,
 }
 
-impl <'a, T> Request<'a, T> 
+impl<'a, T> Request<'a, T>
 where
     T: Deserialize<'a>,
 {
@@ -62,9 +62,7 @@ where
             }
         }
 
-        deserializer.deserialize_map(ReqVisitor {
-            lt: PhantomData,
-        })
+        deserializer.deserialize_map(ReqVisitor { lt: PhantomData })
     }
 }
 
@@ -109,7 +107,7 @@ impl<'a> Deserialize<'a> for Empty<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AxisState {
     Idle = 1,
     Enable = 8,
@@ -124,12 +122,20 @@ impl From<AxisState> for u8 {
     }
 }
 
+impl From<u8> for AxisState {
+    fn from(f: u8) -> AxisState {
+        match f {
+            1 => AxisState::Idle,
+            8 => AxisState::Enable,
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RequestedState {
     pub current_state: u8,
 }
-
-
 
 #[derive(Debug, Deserialize)]
 pub struct Property<T> {
@@ -270,7 +276,6 @@ pub struct TrapezoidalTrajectory {
     pub decel_limit: f64,
     pub vel_limit: f64,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct MotorConfig {

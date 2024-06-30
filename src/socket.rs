@@ -1,6 +1,6 @@
-use std::os::fd::{OwnedFd, AsRawFd, RawFd};
-use nix::sys::socket::{SockaddrIn, MsgFlags};
+use nix::sys::socket::{MsgFlags, SockaddrIn};
 use std::net::Ipv4Addr;
+use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 pub struct Socket<const S: usize> {
     socket: OwnedFd,
     read_buf: [u8; S],
@@ -10,14 +10,19 @@ pub struct Socket<const S: usize> {
 use nix::Result as Res;
 use std::time::Duration;
 
-impl <const S: usize> Socket<S> {
+impl<const S: usize> Socket<S> {
     pub fn new(a: u8, b: u8, c: u8, d: u8) -> Res<Self> {
         Self::from_ipv4(Ipv4Addr::new(a, b, c, d))
     }
 
     pub fn from_ipv4(addr: Ipv4Addr) -> Res<Self> {
         use nix::sys::socket::{AddressFamily, SockFlag, SockType};
-        let fd = nix::sys::socket::socket(AddressFamily::Inet, SockType::Datagram, SockFlag::empty(), None)?;
+        let fd = nix::sys::socket::socket(
+            AddressFamily::Inet,
+            SockType::Datagram,
+            SockFlag::empty(),
+            None,
+        )?;
 
         let read_buf = [0u8; S];
         Ok(Self {
@@ -47,7 +52,12 @@ impl <const S: usize> Socket<S> {
     }
 
     pub fn send_raw(&self, bytes: &[u8], port: u16) -> Res<usize> {
-        let wrote = nix::sys::socket::sendto(self.as_raw_fd(), bytes, &self.sockaddr(port), MsgFlags::empty())?;
+        let wrote = nix::sys::socket::sendto(
+            self.as_raw_fd(),
+            bytes,
+            &self.sockaddr(port),
+            MsgFlags::empty(),
+        )?;
         Ok(wrote)
     }
 
@@ -61,7 +71,8 @@ impl <const S: usize> Socket<S> {
     }
 
     pub fn recv_from_raw<'a>(&'a mut self) -> Res<(SockaddrIn, &'a [u8])> {
-        let (read, addr) = nix::sys::socket::recvfrom::<SockaddrIn>(self.as_raw_fd(), &mut self.read_buf)?;
+        let (read, addr) =
+            nix::sys::socket::recvfrom::<SockaddrIn>(self.as_raw_fd(), &mut self.read_buf)?;
         let addr = addr.unwrap();
 
         let ptr = self.read_buf.as_ptr();
@@ -71,7 +82,7 @@ impl <const S: usize> Socket<S> {
     }
 }
 
-impl <const S: usize> AsRawFd for Socket<S> {
+impl<const S: usize> AsRawFd for Socket<S> {
     fn as_raw_fd(&self) -> RawFd {
         self.socket.as_raw_fd()
     }

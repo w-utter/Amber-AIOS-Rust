@@ -1,9 +1,10 @@
+use crate::cmds;
+use crate::serde::*;
 use crate::socket::Socket;
 use nix::Result as Res;
-use std::net::Ipv4Addr;
-use serde_json::Value as JSVal;
-use crate::serde::*;
 use serde::Deserialize;
+use serde_json::Value as JSVal;
+use std::net::Ipv4Addr;
 
 pub struct AiosMotor<const R: usize, const W: usize> {
     socket: Socket<R>,
@@ -15,18 +16,15 @@ struct SerCounter<'a> {
     writer: std::io::BufWriter<&'a mut [u8]>,
 }
 
-impl <'a> SerCounter<'a> {
+impl<'a> SerCounter<'a> {
     fn new(buf: &'a mut [u8]) -> Self {
         let writer = std::io::BufWriter::new(buf);
 
-        Self {
-            count: 0,
-            writer,
-        }
+        Self { count: 0, writer }
     }
 }
 
-impl <'a> std::io::Write for SerCounter<'a> {
+impl<'a> std::io::Write for SerCounter<'a> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let len = self.writer.write(buf)?;
         self.count += len;
@@ -38,16 +36,13 @@ impl <'a> std::io::Write for SerCounter<'a> {
     }
 }
 
-impl <const R: usize, const W: usize> AiosMotor<R, W> {
+impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub const SERVICE_PORT: u16 = 2334;
     pub const DATA_PORT: u16 = 2333;
 
     pub fn from_socket(socket: Socket<R>) -> Self {
         let write_buf = [0u8; W];
-        Self {
-            write_buf,
-            socket,
-        }
+        Self { write_buf, socket }
     }
 
     pub fn from_ip(a: u8, b: u8, c: u8, d: u8) -> Res<Self> {
@@ -71,40 +66,44 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn send_recv_service<'a>(&'a mut self, value: &JSVal) -> Result<&'a [u8], Err> {
         Ok(self.send_recv(value, Self::SERVICE_PORT)?)
     }
-    
+
     pub fn send_recv_data<'a>(&'a mut self, value: &JSVal) -> Result<&'a [u8], Err> {
         Ok(self.send_recv(value, Self::DATA_PORT)?)
     }
 
-    pub unsafe fn send_recv_parse<'a, T: Deserialize<'a> + 'a>(&'a mut self, cmd: JSVal, port: u16) -> Result<Request<T>, Err> {
+    pub unsafe fn send_recv_parse<'a, T: Deserialize<'a> + 'a>(
+        &'a mut self,
+        cmd: JSVal,
+        port: u16,
+    ) -> Result<Request<T>, Err> {
         let bytes = self.send_recv(&cmd, port)?;
         let str = unsafe { std::str::from_utf8_unchecked(bytes) };
         let data: Request<T> = serde_json::from_str(str)?;
         Ok(data)
     }
 
-    pub unsafe fn send_recv_parse_service<'a, T: Deserialize<'a> + 'a>(&'a mut self, cmd: JSVal) -> Result<Request<T>, Err> {
+    pub unsafe fn send_recv_parse_service<'a, T: Deserialize<'a> + 'a>(
+        &'a mut self,
+        cmd: JSVal,
+    ) -> Result<Request<T>, Err> {
         self.send_recv_parse(cmd, Self::SERVICE_PORT)
     }
 
-    pub unsafe fn send_recv_parse_data<'a, T: Deserialize<'a> + 'a>(&'a mut self, cmd: JSVal) -> Result<Request<T>, Err> {
+    pub unsafe fn send_recv_parse_data<'a, T: Deserialize<'a> + 'a>(
+        &'a mut self,
+        cmd: JSVal,
+    ) -> Result<Request<T>, Err> {
         self.send_recv_parse(cmd, Self::DATA_PORT)
     }
 
     pub fn set_axis_state(&mut self, state: AxisState) -> Result<(), Err> {
-        let req_state: u8 = state.into();
-
-        let cmd = serde_json::json!({
-            "method": "SET",
-            "reqTarget": "/m1/requested_state",
-            "property": req_state,
-        });
+        let cmd = cmds::set_requested_state(state);
 
         let data = unsafe { self.send_recv_parse_service::<RequestedState>(cmd)? };
-        let state = data.data.current_state;
+        let ret_state: AxisState = data.data.current_state.into();
 
-        if state != req_state {
-            panic!("incorrect state assigned {state}, tried {req_state}");
+        if ret_state != state {
+            return Err(Err::UnexpectedReturn);
         }
         Ok(())
     }
@@ -118,10 +117,7 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     }
 
     pub fn is_encoder_ready(&mut self) -> Result<bool, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/m1/encoder/is_ready",
-        });
+        let cmd = cmds::encoder_is_ready();
 
         let data = unsafe { self.send_recv_parse_service::<Property<bool>>(cmd)? };
         Ok(data.data.property)
@@ -139,12 +135,7 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     }
     //NOTE: i would not use this unless absolutely necessary
     pub fn reboot(&mut self) -> Result<(), Err> {
-        let cmd = serde_json::json!({
-            "method": "SET",
-            "reqTarget": "/",
-            "property": "reboot",
-
-        });
+        let cmd = cmds::reboot();
 
         let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
         Ok(())
@@ -154,12 +145,7 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     // this will not do anything until `reboot` is called
     // and even then i(will)dk if that fixes it completely.
     pub unsafe fn reboot_motor_drive(&mut self) -> Result<(), Err> {
-        let cmd = serde_json::json!({
-            "method": "SET",
-            "reqTarget": "/",
-            "property": "reboot_motor_drive",
-
-        });
+        let cmd = cmds::reboot_motor_drive();
 
         let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
         Ok(())
@@ -172,62 +158,42 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     }
 
     pub fn get_state(&mut self) -> Result<RequestedState, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/m1/requested_state",
-        });
+        let cmd = cmds::get_requested_state();
+
         let data = unsafe { self.send_recv_parse_service::<RequestedState>(cmd)? };
         Ok(data.data)
     }
 
     pub fn set_control_mode(&mut self, control_mode: ControlMode) -> Result<(), Err> {
-        let ctrl: u8 = control_mode.into();
-        let cmd = serde_json::json!({
-            "method": "SET",
-            "reqTarget": "/m1/controller/config",
-            "control_mode": ctrl,
-        });
+        let cmd = cmds::set_control_mode(control_mode);
 
         let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
         Ok(())
     }
 
     pub fn set_linear_count(&mut self, linear_count: u8) -> Result<(), Err> {
-        let cmd = serde_json::json!({
-            "method": "SET",
-            "reqTarget": "/m1/encoder",
-            "set_linear_count": linear_count,
-        });
+        let cmd = cmds::set_linear_count(linear_count);
+
         let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
         Ok(())
     }
-    
+
     pub fn current_velocity_position(&mut self) -> Result<CVP, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/m1/CVP",
-        });
+        let cmd = cmds::cvp();
 
         let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
         Ok(data.data)
     }
 
     pub fn controller_config(&mut self) -> Result<ControllerConfig, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/m1/controller/config",
-        });
+        let cmd = cmds::get_controller_config();
 
         let data = unsafe { self.send_recv_parse_service::<ControllerConfigRaw>(cmd)? };
         Ok(data.data.into())
     }
 
     pub fn err(&mut self) -> Result<MotorError, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/m1/error",
-
-        });
+        let cmd = cmds::get_err();
 
         let data = unsafe { self.send_recv_parse_service::<MotorErrorRaw>(cmd)? };
         let data: MotorError = data.data.into();
@@ -235,11 +201,7 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     }
 
     pub fn clear_err(&mut self) -> Result<MotorError, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/m1/error",
-            "clear_error": true,
-        });
+        let cmd = cmds::clear_err();
 
         let data = unsafe { self.send_recv_parse_service::<MotorErrorRaw>(cmd)? };
         let data: MotorError = data.data.into();
@@ -247,38 +209,26 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     }
 
     pub fn set_velocity(&mut self, velocity: f64, current_ff: f64) -> Result<CVP, Err> {
-        let cmd = serde_json::json!({
-            "method": "SET",
-            "reqTarget": "/m1/setVelocity",
-            "velocity": velocity,
-            "current_ff": current_ff,
-            "reply_enable": true,
-        });
+        let cmd = cmds::set_velocity(velocity, current_ff);
 
         let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
         Ok(data.data)
     }
 
-    pub fn set_position(&mut self, position: f64, velocity: f64, current_ff: f64) -> Result<CVP, Err> {
-        let cmd = serde_json::json!({
-            "method": "SET",
-            "reqTarget": "/m1/setPosition",
-            "velocity": velocity,
-            "current_ff": current_ff,
-            "position": position,
-            "reply_enable": true,
-        });
+    pub fn set_position(
+        &mut self,
+        position: f64,
+        velocity: f64,
+        current_ff: f64,
+    ) -> Result<CVP, Err> {
+        let cmd = cmds::set_position(position, velocity, current_ff);
 
         let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
         Ok(data.data)
     }
 
     pub fn set_current(&mut self, current: f64) -> Result<CVP, Err> {
-        let cmd = serde_json::json!({
-            "method": "SET",
-            "reqTarget": "/m1/setCurrent",
-            "current": current,
-        });
+        let cmd = cmds::set_current(current);
 
         let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
         Ok(data.data)
@@ -290,10 +240,7 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     }
 
     pub fn get_root(&mut self) -> Result<RootInfo, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/",
-        });
+        let cmd = cmds::get_root();
 
         let data = unsafe { self.send_recv_parse_service::<RootInfo>(cmd)? };
         Ok(data.data)
@@ -302,20 +249,14 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     //FIXME: theres also set, save, and erase config
     //which have not been implemented
     pub fn get_root_config(&mut self) -> Result<RootConfig, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/config",
-        });
+        let cmd = cmds::get_root_config();
 
         let data = unsafe { self.send_recv_parse_service::<RootConfig>(cmd)? };
         Ok(data.data)
-    }    
+    }
 
     pub fn get_network_settings(&mut self) -> Result<NetworkSettings, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/network_setting",
-        });
+        let cmd = cmds::get_network_settings();
 
         let data = unsafe { self.send_recv_parse_service::<NetworkSettings>(cmd)? };
         Ok(data.data)
@@ -324,10 +265,7 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     //FIXME: theres also a set motor config
     //which has not been implemented
     pub fn motor_config(&mut self) -> Result<MotorConfig, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/m1/motor/config",
-        });
+        let cmd = cmds::get_m1_motor_config();
 
         let data = unsafe { self.send_recv_parse_service::<MotorConfig>(cmd)? };
         Ok(data.data)
@@ -336,10 +274,7 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
     //FIXME: this also has a set
     //which has not been implemented
     pub fn trapezoidal_trajectory(&mut self) -> Result<TrapezoidalTrajectory, Err> {
-        let cmd = serde_json::json!({
-            "method": "GET",
-            "reqTarget": "/m1/trap_traj",
-        });
+        let cmd = cmds::get_m1_trap_traj();
 
         let data = unsafe { self.send_recv_parse_service::<TrapezoidalTrajectory>(cmd)? };
         Ok(data.data)
@@ -358,15 +293,19 @@ impl <const R: usize, const W: usize> AiosMotor<R, W> {
         println!("\n{s}\n");
         Ok(())
     }
+
+    pub fn serialize_cmd<'a>(&'a mut self, val: &JSVal) -> Result<&'a [u8], serde_json::Error> {
+        serialize_cmd(&mut self.write_buf, val)
+    }
 }
 
-impl <const R: usize, const W: usize> std::os::fd::AsRawFd for AiosMotor<R, W> {
+impl<const R: usize, const W: usize> std::os::fd::AsRawFd for AiosMotor<R, W> {
     fn as_raw_fd(&self) -> std::os::fd::RawFd {
         self.socket.as_raw_fd()
     }
 }
 
-impl <const R: usize, const W: usize> Drop for AiosMotor<R, W> {
+impl<const R: usize, const W: usize> Drop for AiosMotor<R, W> {
     fn drop(&mut self) {
         let _ = self.disable();
     }
@@ -387,6 +326,7 @@ impl From<nix::Error> for Err {
 pub enum Err {
     Serde(serde_json::Error),
     Io(nix::Error),
+    UnexpectedReturn,
 }
 
 fn serialize_cmd<'a>(buf: &'a mut [u8], val: &JSVal) -> Result<&'a [u8], serde_json::Error> {
