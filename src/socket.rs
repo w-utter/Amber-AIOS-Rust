@@ -80,6 +80,14 @@ impl<const S: usize> Socket<S> {
 
         Ok((addr, data))
     }
+
+    pub fn read_buf_mut(&mut self) -> &mut [u8] {
+        self.read_buf.as_mut()
+    }
+
+    pub fn read_buf(&self) -> &[u8] {
+        self.read_buf.as_ref()
+    }
 }
 
 impl<const S: usize> AsRawFd for Socket<S> {

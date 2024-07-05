@@ -297,6 +297,14 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn serialize_cmd<'a>(&'a mut self, val: &JSVal) -> Result<&'a [u8], serde_json::Error> {
         serialize_cmd(&mut self.write_buf, val)
     }
+
+    pub fn read_buf_mut(&mut self) -> &mut [u8] {
+        self.socket.read_buf_mut()
+    }
+
+    pub fn read_buf(&self) -> &[u8] {
+        self.socket.read_buf()
+    }
 }
 
 impl<const R: usize, const W: usize> std::os::fd::AsRawFd for AiosMotor<R, W> {
