@@ -63,43 +63,23 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(self.socket.recv_raw()?)
     }
 
-    pub fn send_recv_service<'a>(&'a mut self, value: &JSVal) -> Result<&'a [u8], Err> {
-        Ok(self.send_recv(value, Self::SERVICE_PORT)?)
-    }
-
-    pub fn send_recv_data<'a>(&'a mut self, value: &JSVal) -> Result<&'a [u8], Err> {
-        Ok(self.send_recv(value, Self::DATA_PORT)?)
-    }
-
-    pub unsafe fn send_recv_parse<'a, T: Deserialize<'a> + 'a>(
+    pub unsafe fn send_recv_parse<'a, C>(
         &'a mut self,
-        cmd: JSVal,
-        port: u16,
-    ) -> Result<Request<T>, Err> {
-        let bytes = self.send_recv(&cmd, port)?;
+        msg: &C,
+    ) -> Result<Request<<C as cmds::Command>::Return>, Err> 
+        where C: cmds::Command<'a>,
+        <C as cmds::Command<'a>>::Return: Deserialize<'a> + 'a,
+    {
+        let cmd = msg.cmd();
+        let bytes = self.send_recv(&cmd, <C as cmds::Command>::PORT)?;
         let str = unsafe { std::str::from_utf8_unchecked(bytes) };
-        let data: Request<T> = serde_json::from_str(str)?;
+        let data: Request<<C as cmds::Command>::Return> = serde_json::from_str(str)?;
         Ok(data)
-    }
-
-    pub unsafe fn send_recv_parse_service<'a, T: Deserialize<'a> + 'a>(
-        &'a mut self,
-        cmd: JSVal,
-    ) -> Result<Request<T>, Err> {
-        self.send_recv_parse(cmd, Self::SERVICE_PORT)
-    }
-
-    pub unsafe fn send_recv_parse_data<'a, T: Deserialize<'a> + 'a>(
-        &'a mut self,
-        cmd: JSVal,
-    ) -> Result<Request<T>, Err> {
-        self.send_recv_parse(cmd, Self::DATA_PORT)
     }
 
     pub fn set_axis_state(&mut self, state: AxisState) -> Result<(), Err> {
         let cmd = cmds::set_requested_state(state);
-
-        let data = unsafe { self.send_recv_parse_service::<RequestedState>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         let ret_state: AxisState = data.data.current_state.into();
 
         if ret_state != state {
@@ -118,8 +98,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
 
     pub fn is_encoder_ready(&mut self) -> Result<bool, Err> {
         let cmd = cmds::encoder_is_ready();
-
-        let data = unsafe { self.send_recv_parse_service::<Property<bool>>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data.property)
     }
 
@@ -136,8 +115,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     //NOTE: i would not use this unless absolutely necessary
     pub fn reboot(&mut self) -> Result<(), Err> {
         let cmd = cmds::reboot();
-
-        let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
         Ok(())
     }
 
@@ -147,7 +125,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub unsafe fn reboot_motor_drive(&mut self) -> Result<(), Err> {
         let cmd = cmds::reboot_motor_drive();
 
-        let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
         Ok(())
     }
 
@@ -160,42 +138,41 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn get_state(&mut self) -> Result<RequestedState, Err> {
         let cmd = cmds::get_requested_state();
 
-        let data = unsafe { self.send_recv_parse_service::<RequestedState>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
     pub fn set_control_mode(&mut self, control_mode: ControlMode) -> Result<(), Err> {
         let cmd = cmds::set_control_mode(control_mode);
 
-        let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
         Ok(())
     }
 
     pub fn set_linear_count(&mut self, linear_count: u8) -> Result<(), Err> {
         let cmd = cmds::set_linear_count(linear_count);
 
-        let _ = unsafe { self.send_recv_parse_service::<Empty>(cmd)? };
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
         Ok(())
     }
 
     pub fn current_velocity_position(&mut self) -> Result<CVP, Err> {
         let cmd = cmds::cvp();
 
-        let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
     pub fn controller_config(&mut self) -> Result<ControllerConfig, Err> {
         let cmd = cmds::get_controller_config();
 
-        let data = unsafe { self.send_recv_parse_service::<ControllerConfigRaw>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data.into())
     }
 
     pub fn err(&mut self) -> Result<MotorError, Err> {
         let cmd = cmds::get_err();
-
-        let data = unsafe { self.send_recv_parse_service::<MotorErrorRaw>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         let data: MotorError = data.data.into();
         Ok(data)
     }
@@ -203,7 +180,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn clear_err(&mut self) -> Result<MotorError, Err> {
         let cmd = cmds::clear_err();
 
-        let data = unsafe { self.send_recv_parse_service::<MotorErrorRaw>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         let data: MotorError = data.data.into();
         Ok(data)
     }
@@ -211,7 +188,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn set_velocity(&mut self, velocity: f64, current_ff: f64) -> Result<CVP, Err> {
         let cmd = cmds::set_velocity(velocity, current_ff);
 
-        let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
@@ -223,14 +200,14 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     ) -> Result<CVP, Err> {
         let cmd = cmds::set_position(position, velocity, current_ff);
 
-        let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
     pub fn set_current(&mut self, current: f64) -> Result<CVP, Err> {
         let cmd = cmds::set_current(current);
 
-        let data = unsafe { self.send_recv_parse_data::<CVP>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
@@ -242,7 +219,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn get_root(&mut self) -> Result<RootInfo, Err> {
         let cmd = cmds::get_root();
 
-        let data = unsafe { self.send_recv_parse_service::<RootInfo>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
@@ -251,14 +228,14 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn get_root_config(&mut self) -> Result<RootConfig, Err> {
         let cmd = cmds::get_root_config();
 
-        let data = unsafe { self.send_recv_parse_service::<RootConfig>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
     pub fn get_network_settings(&mut self) -> Result<NetworkSettings, Err> {
         let cmd = cmds::get_network_settings();
 
-        let data = unsafe { self.send_recv_parse_service::<NetworkSettings>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
@@ -267,7 +244,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn motor_config(&mut self) -> Result<MotorConfig, Err> {
         let cmd = cmds::get_m1_motor_config();
 
-        let data = unsafe { self.send_recv_parse_service::<MotorConfig>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
@@ -276,7 +253,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub fn trapezoidal_trajectory(&mut self) -> Result<TrapezoidalTrajectory, Err> {
         let cmd = cmds::get_m1_trap_traj();
 
-        let data = unsafe { self.send_recv_parse_service::<TrapezoidalTrajectory>(cmd)? };
+        let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
