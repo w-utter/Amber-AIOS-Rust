@@ -14,6 +14,7 @@ macro_rules! impl_msg {
         impl<'readbuf> Command<'readbuf> for $name {
             const PORT: u16 = $port;
             type Return = $out;
+            const RETURN_VARIANT: u8 = Self::Return::VARIANT;
 
             fn cmd(&self) -> &JSVal {
                 &self.inner
@@ -37,7 +38,8 @@ where
     Self: 'readbuf,
 {
     const PORT: u16;
-    type Return: serde::Deserialize<'readbuf>;
+    type Return: serde::Deserialize<'readbuf> + crate::serde::ReturnVariant;
+    const RETURN_VARIANT: u8;
 
     fn cmd(&self) -> &JSVal;
 

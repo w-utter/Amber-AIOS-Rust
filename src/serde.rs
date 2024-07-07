@@ -95,6 +95,72 @@ where
     }
 }
 
+pub trait ReturnVariant {
+    const VARIANT: u8;
+}
+
+
+
+macro_rules! impl_variant {
+    ($($t:ty => $val:expr),+,) => {
+        $(
+            impl ReturnVariant for $t {
+                const VARIANT: u8 = $val;
+            }
+         )+
+    };
+    ($($t:ident),+,) => {
+        #[allow(non_camel_case_types)]
+        enum CmdKind {
+            $($t),+,
+        }
+
+        impl From<u8> for CmdKind {
+            fn from(num: u8) -> CmdKind {
+                match num {
+                    $(
+                        <$t as ReturnVariant>::VARIANT => CmdKind::$t,
+                     )+
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+}
+
+
+impl_variant! {
+    Empty,
+    CVP,
+    ControllerConfigRaw,
+    MotorErrorRaw,
+    TrapezoidalTrajectory,
+    MotorConfig,
+    NetworkSettings,
+    RootConfig,
+    RootInfo,
+    RequestedState,
+    bool,
+}
+
+impl_variant!{
+    Empty<'_> => 0,
+    CVP => 1,
+    ControllerConfigRaw => 2,
+    MotorErrorRaw<'_> => 3,
+    TrapezoidalTrajectory => 4,
+    MotorConfig => 5,
+    NetworkSettings<'_> => 6,
+    RootConfig => 7,
+    RootInfo<'_> => 8,
+    RequestedState => 9,
+    bool => 10,
+}
+
+impl <T> ReturnVariant for Property<T> where T: ReturnVariant {
+    const VARIANT: u8 = T::VARIANT;
+}
+
 #[derive(Debug)]
 pub struct Empty<'a>(PhantomData<&'a ()>);
 
