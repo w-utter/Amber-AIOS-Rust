@@ -32,18 +32,21 @@ macro_rules! impl_msg {
     };
 }
 
-pub trait Command<'readbuf> where Self: 'readbuf {
+pub trait Command<'readbuf>
+where
+    Self: 'readbuf,
+{
     const PORT: u16;
     type Return: serde::Deserialize<'readbuf>;
 
     fn cmd(&self) -> &JSVal;
 
-    fn parse_return(bytes: &'readbuf [u8]) ->  Result<Request<'readbuf, Self::Return>, serde_json::Error> {
-        let s = unsafe {
-            core::str::from_utf8_unchecked(bytes)
-        };
+    fn parse_return(
+        bytes: &'readbuf [u8],
+    ) -> Result<Request<'readbuf, Self::Return>, serde_json::Error> {
+        let s = unsafe { core::str::from_utf8_unchecked(bytes) };
         let parsed: Request<<Self as Command<'readbuf>>::Return> = serde_json::from_str(s)?;
-        
+
         Ok(parsed)
     }
 }
