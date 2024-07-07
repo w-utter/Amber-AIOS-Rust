@@ -65,16 +65,14 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
 
     pub unsafe fn send_recv_parse<'a, C>(
         &'a mut self,
-        msg: &C,
+        cmd: &C,
     ) -> Result<Request<<C as cmds::Command>::Return>, Err>
     where
         C: cmds::Command<'a>,
         <C as cmds::Command<'a>>::Return: Deserialize<'a> + 'a,
     {
-        let cmd = msg.cmd();
-        let bytes = self.send_recv(&cmd, <C as cmds::Command>::PORT)?;
-        let str = unsafe { std::str::from_utf8_unchecked(bytes) };
-        let data: Request<<C as cmds::Command>::Return> = serde_json::from_str(str)?;
+        let bytes = self.send_recv(cmd.cmd(), <C as cmds::Command>::PORT)?;
+        let data = <C as cmds::Command<'a>>::parse_return(bytes)?;
         Ok(data)
     }
 
