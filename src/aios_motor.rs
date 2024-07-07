@@ -66,8 +66,9 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub unsafe fn send_recv_parse<'a, C>(
         &'a mut self,
         msg: &C,
-    ) -> Result<Request<<C as cmds::Command>::Return>, Err> 
-        where C: cmds::Command<'a>,
+    ) -> Result<Request<<C as cmds::Command>::Return>, Err>
+    where
+        C: cmds::Command<'a>,
         <C as cmds::Command<'a>>::Return: Deserialize<'a> + 'a,
     {
         let cmd = msg.cmd();

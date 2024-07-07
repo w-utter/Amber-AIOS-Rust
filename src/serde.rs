@@ -187,7 +187,7 @@ pub struct CVP {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct ControllerConfigRaw {
+pub struct ControllerConfigRaw {
     control_mode: u8,
     input_mode: u8,
     pos_gain: f64,
@@ -233,7 +233,7 @@ impl From<ControllerConfigRaw> for ControllerConfig {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct MotorErrorRaw<'a> {
+pub struct MotorErrorRaw<'a> {
     axis: &'a str,
     motor: &'a str,
     encoder: &'a str,
