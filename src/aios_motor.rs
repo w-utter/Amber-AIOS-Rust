@@ -63,6 +63,10 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(self.socket.recv_raw()?)
     }
 
+    pub fn addr(&self) -> Ipv4Addr {
+        self.socket.addr()
+    }
+
     pub unsafe fn send_recv_parse<'a, C>(
         &'a mut self,
         cmd: &C,

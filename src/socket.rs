@@ -51,6 +51,10 @@ impl<const S: usize> Socket<S> {
         SockaddrIn::new(a, b, c, d, port)
     }
 
+    pub fn addr(&self) -> Ipv4Addr {
+        self.addr
+    }
+
     pub fn send_raw(&self, bytes: &[u8], port: u16) -> Res<usize> {
         let wrote = nix::sys::socket::sendto(
             self.as_raw_fd(),
