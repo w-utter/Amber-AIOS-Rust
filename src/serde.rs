@@ -99,8 +99,6 @@ pub trait ReturnVariant {
     const VARIANT: u8;
 }
 
-
-
 macro_rules! impl_variant {
     ($($t:ty => $val:expr),+,) => {
         $(
@@ -111,6 +109,7 @@ macro_rules! impl_variant {
     };
     ($($t:ident),+,) => {
         #[allow(non_camel_case_types)]
+        #[derive(PartialEq, Eq, Debug)]
         pub enum CmdKind {
             $($t),+,
         }
@@ -128,7 +127,6 @@ macro_rules! impl_variant {
     }
 }
 
-
 impl_variant! {
     Empty,
     CVP,
@@ -143,7 +141,7 @@ impl_variant! {
     bool,
 }
 
-impl_variant!{
+impl_variant! {
     Empty<'_> => 0,
     CVP => 1,
     ControllerConfigRaw => 2,
@@ -157,7 +155,10 @@ impl_variant!{
     bool => 10,
 }
 
-impl <T> ReturnVariant for Property<T> where T: ReturnVariant {
+impl<T> ReturnVariant for Property<T>
+where
+    T: ReturnVariant,
+{
     const VARIANT: u8 = T::VARIANT;
 }
 
