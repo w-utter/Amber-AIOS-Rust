@@ -111,7 +111,7 @@ macro_rules! impl_variant {
     };
     ($($t:ident),+,) => {
         #[allow(non_camel_case_types)]
-        enum CmdKind {
+        pub enum CmdKind {
             $($t),+,
         }
 
