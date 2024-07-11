@@ -5,6 +5,16 @@ use serde_json::Value as JSVal;
 const DATA_PORT: u16 = 2333;
 const SERVICE_PORT: u16 = 2334;
 
+macro_rules! motor_path {
+    ($num:expr, $post:expr) => {
+        match $num {
+            0 => constcat::concat!("/m0/", $post),
+            1 => constcat::concat!("/m1/", $post),
+            o => panic!("invalid motor num: {o}, only 0 & 1 are supported"),
+        }
+    };
+}
+
 macro_rules! impl_msg {
     ($name:ident, $port:expr, $out:ty) => {
         pub struct $name {
@@ -55,11 +65,11 @@ where
 
 impl_msg!(SetRequestedState, SERVICE_PORT, RequestedState);
 
-pub fn set_requested_state(state: AxisState) -> SetRequestedState {
+pub fn set_requested_state<const MOTOR_NUM: u8>(state: AxisState) -> SetRequestedState {
     let state: u8 = state.into();
     json!({
         "method": "SET",
-        "reqTarget": "/m1/requested_state",
+        "reqTarget": motor_path!(MOTOR_NUM, "requested_state"),
         "property": state,
     })
     .into()
@@ -67,10 +77,10 @@ pub fn set_requested_state(state: AxisState) -> SetRequestedState {
 
 impl_msg!(EncoderIsReady, SERVICE_PORT, Property<bool>);
 
-pub fn encoder_is_ready() -> EncoderIsReady {
+pub fn encoder_is_ready<const MOTOR_NUM: u8>() -> EncoderIsReady {
     json!({
         "method": "GET",
-        "reqTarget": "/m1/encoder/is_ready",
+        "reqTarget": motor_path!(MOTOR_NUM, "encoder/is_ready"),
     })
     .into()
 }
@@ -100,32 +110,53 @@ pub fn reboot_motor_drive() -> RebootMotorDrive {
 
 impl_msg!(GetRequestedState, SERVICE_PORT, RequestedState);
 
-pub fn get_requested_state() -> GetRequestedState {
+pub fn get_requested_state<const MOTOR_NUM: u8>() -> GetRequestedState {
     json!({
         "method": "GET",
-        "reqTarget": "/m1/requested_state",
+        "reqTarget": motor_path!(MOTOR_NUM, "requested_state"),
     })
     .into()
 }
 
 impl_msg!(SetControlMode, SERVICE_PORT);
 
-pub fn set_control_mode(control_mode: ControlMode) -> SetControlMode {
+pub fn set_control_mode<const MOTOR_NUM: u8>(control_mode: ControlMode) -> SetControlMode {
     let ctrl: u8 = control_mode.into();
     json!({
         "method": "SET",
-        "reqTarget": "/m1/controller/config",
+        "reqTarget": motor_path!(MOTOR_NUM, "controller/config"),
         "control_mode": ctrl,
+    })
+    .into()
+}
+
+impl_msg!(SetMotionCtrlConfig, SERVICE_PORT);
+
+pub fn set_motion_control_config<const MOTOR_NUM: u8>(
+    pos_gain: f64,
+    vel_gain: f64,
+    vel_integrator_gain: f64,
+    vel_limit: f64,
+    vel_limit_tolerance: f64,
+) -> SetMotionCtrlConfig {
+    json!({
+        "method": "SET",
+        "reqTarget": motor_path!(MOTOR_NUM, "controller/config"),
+        "pos_gain": pos_gain,
+        "vel_gain": vel_gain,
+        "vel_integrator_gain": vel_integrator_gain,
+        "vel_limit": vel_limit,
+        "vel_limit_tolerance": vel_limit_tolerance,
     })
     .into()
 }
 
 impl_msg!(SetLinearCount, SERVICE_PORT);
 
-pub fn set_linear_count(linear_count: u8) -> SetLinearCount {
+pub fn set_linear_count<const MOTOR_NUM: u8>(linear_count: u8) -> SetLinearCount {
     json!({
         "method": "SET",
-        "reqTarget": "/m1/encoder",
+        "reqTarget": motor_path!(MOTOR_NUM, "encoder"),
         "set_linear_count": linear_count,
     })
     .into()
@@ -133,40 +164,40 @@ pub fn set_linear_count(linear_count: u8) -> SetLinearCount {
 
 impl_msg!(GetCVP, DATA_PORT, CVP);
 
-pub fn cvp() -> GetCVP {
+pub fn cvp<const MOTOR_NUM: u8>() -> GetCVP {
     json!({
         "method": "GET",
-        "reqTarget": "/m1/CVP",
+        "reqTarget": motor_path!(MOTOR_NUM, "CVP"),
     })
     .into()
 }
 
 impl_msg!(GetControllerConfig, SERVICE_PORT, ControllerConfigRaw);
 
-pub fn get_controller_config() -> GetControllerConfig {
+pub fn get_controller_config<const MOTOR_NUM: u8>() -> GetControllerConfig {
     json!({
         "method": "GET",
-        "reqTarget": "/m1/controller/config",
+        "reqTarget": motor_path!(MOTOR_NUM, "controller/config"),
     })
     .into()
 }
 
 impl_msg!(GetErr, SERVICE_PORT, MotorErrorRaw<'readbuf>);
 
-pub fn get_err() -> GetErr {
+pub fn get_err<const MOTOR_NUM: u8>() -> GetErr {
     json!({
         "method": "GET",
-        "reqTarget": "/m1/error",
+        "reqTarget": motor_path!(MOTOR_NUM, "error"),
     })
     .into()
 }
 
 impl_msg!(ClearErr, SERVICE_PORT, MotorErrorRaw<'readbuf>);
 
-pub fn clear_err() -> ClearErr {
+pub fn clear_err<const MOTOR_NUM: u8>() -> ClearErr {
     json!({
         "method": "GET",
-        "reqTarget": "/m1/error",
+        "reqTarget": motor_path!(MOTOR_NUM, "error"),
         "clear_error": true,
     })
     .into()
@@ -174,10 +205,10 @@ pub fn clear_err() -> ClearErr {
 
 impl_msg!(SetVelocity, DATA_PORT, CVP);
 
-pub fn set_velocity(velocity: f64, current_ff: f64) -> SetVelocity {
+pub fn set_velocity<const MOTOR_NUM: u8>(velocity: f64, current_ff: f64) -> SetVelocity {
     json!({
         "method": "SET",
-        "reqTarget": "/m1/setVelocity",
+        "reqTarget": motor_path!(MOTOR_NUM, "setVelocity"),
         "velocity": velocity,
         "current_ff": current_ff,
     })
@@ -186,10 +217,13 @@ pub fn set_velocity(velocity: f64, current_ff: f64) -> SetVelocity {
 
 impl_msg!(SetVelocitySilent, DATA_PORT, CVP);
 
-pub fn set_velocity_silent(velocity: f64, current_ff: f64) -> SetVelocitySilent {
+pub fn set_velocity_silent<const MOTOR_NUM: u8>(
+    velocity: f64,
+    current_ff: f64,
+) -> SetVelocitySilent {
     json!({
         "method": "SET",
-        "reqTarget": "/m1/setVelocity",
+        "reqTarget": motor_path!(MOTOR_NUM, "setVelocity"),
         "velocity": velocity,
         "current_ff": current_ff,
         "reply_enable": false,
@@ -199,10 +233,14 @@ pub fn set_velocity_silent(velocity: f64, current_ff: f64) -> SetVelocitySilent 
 
 impl_msg!(SetPosition, DATA_PORT, CVP);
 
-pub fn set_position(position: f64, velocity: f64, current_ff: f64) -> SetPosition {
+pub fn set_position<const MOTOR_NUM: u8>(
+    position: f64,
+    velocity: f64,
+    current_ff: f64,
+) -> SetPosition {
     json!({
         "method": "SET",
-        "reqTarget": "/m1/setPosition",
+        "reqTarget": motor_path!(MOTOR_NUM, "setPosition"),
         "velocity": velocity,
         "current_ff": current_ff,
         "position": position,
@@ -212,10 +250,14 @@ pub fn set_position(position: f64, velocity: f64, current_ff: f64) -> SetPositio
 
 impl_msg!(SetPositionSilent, DATA_PORT, CVP);
 
-pub fn set_position_silent(position: f64, velocity: f64, current_ff: f64) -> SetPositionSilent {
+pub fn set_position_silent<const MOTOR_NUM: u8>(
+    position: f64,
+    velocity: f64,
+    current_ff: f64,
+) -> SetPositionSilent {
     json!({
         "method": "SET",
-        "reqTarget": "/m1/setPosition",
+        "reqTarget": motor_path!(MOTOR_NUM, "setPosition"),
         "velocity": velocity,
         "current_ff": current_ff,
         "position": position,
@@ -226,10 +268,10 @@ pub fn set_position_silent(position: f64, velocity: f64, current_ff: f64) -> Set
 
 impl_msg!(SetCurrent, DATA_PORT, CVP);
 
-pub fn set_current(current: f64) -> SetCurrent {
+pub fn set_current<const MOTOR_NUM: u8>(current: f64) -> SetCurrent {
     json!({
         "method": "SET",
-        "reqTarget": "/m1/setCurrent",
+        "reqTarget": motor_path!(MOTOR_NUM, "setCurrent"),
         "current": current,
     })
     .into()
@@ -237,10 +279,10 @@ pub fn set_current(current: f64) -> SetCurrent {
 
 impl_msg!(SetCurrentSilent, DATA_PORT, CVP);
 
-pub fn set_current_silent(current: f64) -> SetCurrentSilent {
+pub fn set_current_silent<const MOTOR_NUM: u8>(current: f64) -> SetCurrentSilent {
     json!({
         "method": "SET",
-        "reqTarget": "/m1/setCurrent",
+        "reqTarget": motor_path!(MOTOR_NUM, "setCurrent"),
         "current": current,
         "reply_enable": false,
     })
@@ -267,6 +309,21 @@ pub fn get_root_config() -> GetRootConfig {
     .into()
 }
 
+impl_msg!(SetRootConfig, SERVICE_PORT, RootConfig);
+
+pub fn set_root_config(
+    dc_bus_overvoltage_trip_level: f64,
+    dc_bus_undervoltage_trip_level: f64,
+) -> SetRootConfig {
+    json!({
+        "method": "SET",
+        "reqTarget": "/config",
+        "dc_bus_overvoltage_trip_level": dc_bus_overvoltage_trip_level,
+        "dc_bus_undervoltage_trip_level" : dc_bus_undervoltage_trip_level,
+    })
+    .into()
+}
+
 impl_msg!(GetNetworkSettings, SERVICE_PORT, NetworkSettings<'readbuf>);
 
 pub fn get_network_settings() -> GetNetworkSettings {
@@ -277,22 +334,352 @@ pub fn get_network_settings() -> GetNetworkSettings {
     .into()
 }
 
+impl_msg!(SetNetworkSettings, SERVICE_PORT, NetworkSettings<'readbuf>);
+
+pub enum NetworkOptions {
+    Dhcp,
+    Static {
+        ip: [u8; 4],
+        gateway: [u8; 4],
+        subnet: [u8; 4],
+        dns_1: [u8; 4],
+        dns_2: [u8; 4],
+    },
+}
+
+pub fn set_network_settings(
+    ssid: &str,
+    password: &str,
+    name: &str,
+    settings: NetworkOptions,
+) -> SetNetworkSettings {
+    match settings {
+        NetworkOptions::Dhcp => {
+            json!({
+                "method": "SET",
+                "reqTarget": "/network_setting",
+                "DHCP_enable": true,
+                "SSID": ssid,
+                "password": password,
+                "name": name,
+            })
+        }
+        NetworkOptions::Static {
+            ip,
+            gateway,
+            subnet,
+            dns_1,
+            dns_2,
+        } => {
+            json!({
+                "method": "SET",
+                "reqTarget": "/network_setting",
+                "DHCP_enable": false,
+                "SSID": ssid,
+                "password": password,
+                "name": name,
+                "staticIP": ip,
+                "gateway": gateway,
+                "subnet": subnet,
+                "dns_1": dns_1,
+                "dns_2": dns_2,
+            })
+        }
+    }
+    .into()
+}
+
 impl_msg!(GetMotorConfig, SERVICE_PORT, MotorConfig);
 
-pub fn get_m1_motor_config() -> GetMotorConfig {
+pub fn get_motor_config<const MOTOR_NUM: u8>() -> GetMotorConfig {
     json!({
         "method": "GET",
-        "reqTarget": "/m1/motor/config",
+        "reqTarget": motor_path!(MOTOR_NUM, "motor/config"),
+    })
+    .into()
+}
+
+impl_msg!(SetMotorConfig, SERVICE_PORT, MotorConfig);
+
+pub fn set_motor_config<const MOTOR_NUM: u8>(
+    current_lim: f64,
+    current_lim_margin: f64,
+    inverter_temp_limit_lower: f64,
+    inverter_temp_limit_upper: f64,
+    requested_current_range: f64,
+    current_control_bandwidth: f64,
+) -> SetMotorConfig {
+    json!({
+        "method" : "SET",
+        "reqTarget": motor_path!(MOTOR_NUM, "motor/config"),
+        "current_lim" : current_lim,
+        "current_lim_margin" : current_lim_margin,
+        "inverter_temp_limit_lower" : inverter_temp_limit_lower,
+        "inverter_temp_limit_upper" : inverter_temp_limit_upper,
+        "requested_current_range" : requested_current_range,
+        "current_control_bandwidth" : current_control_bandwidth,
+    })
+    .into()
+}
+
+impl_msg!(SaveConfig, SERVICE_PORT);
+
+pub fn save_config() -> SaveConfig {
+    json!({
+        "method" : "SET",
+        "reqTarget" : "/",
+        "property" : "save_config"
+    })
+    .into()
+}
+
+impl_msg!(EraseConfig, SERVICE_PORT);
+
+pub fn erase_config() -> EraseConfig {
+    json!({
+        "method" : "SET",
+        "reqTarget" : "/",
+        "property" : "erase_config"
+    })
+    .into()
+}
+
+impl_msg!(UpdateFirmware, SERVICE_PORT);
+
+pub fn update_firmware() -> UpdateFirmware {
+    json!({
+        "method" : "SET",
+        "reqTarget" : "/",
+        "property" : "OTA_update"
     })
     .into()
 }
 
 impl_msg!(GetTrapTraj, SERVICE_PORT, TrapezoidalTrajectory);
 
-pub fn get_m1_trap_traj() -> GetTrapTraj {
+pub fn get_trap_traj<const MOTOR_NUM: u8>() -> GetTrapTraj {
     json!({
         "method": "GET",
-        "reqTarget": "/m1/trap_traj",
+        "reqTarget": motor_path!(MOTOR_NUM, "trap_traj"),
     })
     .into()
+}
+
+impl_msg!(SetTrapTraj, SERVICE_PORT, TrapezoidalTrajectory);
+
+pub fn set_trap_traj<const MOTOR_NUM: u8>(
+    accel_limit: f64,
+    decel_limit: f64,
+    vel_limit: f64,
+) -> SetTrapTraj {
+    json!({
+        "method": "SET",
+        "reqTarget": motor_path!(MOTOR_NUM, "trap_traj"),
+        "accel_limit": accel_limit,
+        "devel_limit": decel_limit,
+        "vel_limit": vel_limit,
+    })
+    .into()
+}
+
+impl_msg!(EnableVelocityRamp, SERVICE_PORT);
+
+pub fn enable_velocity_ramp<const MOTOR_NUM: u8>(enable: bool) -> EnableVelocityRamp {
+    json!({
+        "method": "SET",
+        "reqTarget": motor_path!(MOTOR_NUM, "controller"),
+        "enable": enable,
+    })
+    .into()
+}
+
+impl_msg!(TargetVelocityRamp, DATA_PORT);
+
+pub fn target_velocity_ramp<const MOTOR_NUM: u8>(target_velocity: f64) -> TargetVelocityRamp {
+    json!({
+        "method": "SET",
+        "reqTarget": motor_path!(MOTOR_NUM, "controller"),
+        "vel_ramp_target": target_velocity,
+    })
+    .into()
+}
+
+impl_msg!(TrapezoidalMove, DATA_PORT);
+
+pub fn trapezoidal_move<const MOTOR_NUM: u8>(position: f64) -> TrapezoidalMove {
+    json!({
+        "method": "SET",
+        "reqTarget": motor_path!(MOTOR_NUM, "trapezoidalMove"),
+        "property": position,
+    })
+    .into()
+}
+
+/*
+impl_msg!(GetIOState, DATA_PORT, IoState);
+
+pub fn get_io_state() -> GetIOState {
+    json!({
+        "method": "GET",
+        "reqTarget": "/IO_State"
+    }).into()
+}
+
+impl_msg!(SetIOState, DATA_PORT, IoState);
+
+pub fn set_io_state() -> SetIOState {
+    json!({
+        "method": "SET",
+        "reqTarget": "/IO_State",
+        "PWM0_CH": 0,
+        "PWM1_CH": 0,
+        "SERVO0": 0,
+        "SERVO1": 0,
+    }).into()
+}
+*/
+
+impl_msg!(GetEncoderInfo, SERVICE_PORT, EncoderInfo);
+
+pub fn get_encoder_info() -> GetEncoderInfo {
+    json!({
+        "method": "GET",
+        "reqTarget": "/encoder_info",
+    })
+    .into()
+}
+
+impl_msg!(GetAbsEncoder, SERVICE_PORT, AbsEncoderPos);
+
+pub fn absolute_encoder_position() -> GetAbsEncoder {
+    json!({
+        "method": "GET",
+        "reqTarget": "/abs_encoder",
+    })
+    .into()
+}
+
+pub mod binary {
+
+    use bincode::Options;
+    const PASSTHROUGH_PORT: u16 = 10000;
+
+    pub trait BinaryCommand<'a> {
+        const MSG_ID: u8;
+        type Return: serde::Deserialize<'a>;
+        const PORT: u16 = PASSTHROUGH_PORT;
+
+        unsafe fn serialize<'b>(&self, buf: &'b mut [u8]) -> &'b [u8]
+        where
+            Self: Sized;
+
+        unsafe fn parse_return(ret: &'a [u8]) -> Self::Return
+        where
+            Self: Sized,
+        {
+            let data = &ret[1..core::mem::size_of::<Self::Return>() + 1];
+            bincode::DefaultOptions::new()
+                .with_little_endian()
+                .deserialize(data)
+                .unwrap()
+        }
+    }
+
+    macro_rules! impl_bin {
+        ($name:ident, $id:expr, $in:ty) => {
+            pub struct $name {
+                inner: $in,
+            }
+
+            impl BinaryCommand<'_> for $name {
+                const MSG_ID: u8 = $id;
+                type Return = BinaryCVP;
+
+                unsafe fn serialize<'a>(&self, buf: &'a mut [u8]) -> &'a [u8]
+                where
+                    Self: Sized,
+                {
+                    buf[0] = Self::MSG_ID;
+
+                    let writer = std::io::BufWriter::new(&mut buf[1..]);
+                    bincode::DefaultOptions::new()
+                        .with_little_endian()
+                        .serialize_into(writer, &self.inner)
+                        .unwrap();
+                    &buf[..core::mem::size_of::<Self>()]
+                }
+            }
+
+            impl From<$in> for $name {
+                fn from(f: $in) -> $name {
+                    $name { inner: f }
+                }
+            }
+        };
+    }
+
+    #[derive(serde::Deserialize)]
+    pub struct BinaryCVP {
+        position: f32,
+        velocity: f32,
+        current: f32,
+    }
+
+    use crate::serde::CVP;
+    impl From<BinaryCVP> for CVP {
+        fn from(bin: BinaryCVP) -> CVP {
+            let BinaryCVP {
+                position,
+                velocity,
+                current,
+            } = bin;
+
+            CVP {
+                position: position as _,
+                velocity: velocity as _,
+                current: current as _,
+            }
+        }
+    }
+
+    #[derive(serde::Serialize)]
+    struct InputPosition {
+        position: f32,
+        velocity: i16,
+        torque: i16,
+    }
+
+    impl_bin!(SetInputPosition, 0x0C, InputPosition);
+
+    pub fn set_input_position(position: f32, velocity: i16, torque: i16) -> SetInputPosition {
+        InputPosition {
+            position,
+            velocity,
+            torque,
+        }
+        .into()
+    }
+
+    #[derive(serde::Serialize)]
+    struct InputVelocity {
+        velocity: f32,
+        torque: f32,
+    }
+    impl_bin!(SetInputVelocity, 0x0D, InputVelocity);
+
+    pub fn set_input_velocity(velocity: f32, torque: f32) -> SetInputVelocity {
+        InputVelocity { velocity, torque }.into()
+    }
+
+    impl_bin!(SetInputTorque, 0x0E, f32);
+
+    pub fn set_input_torque(torque: f32) -> SetInputTorque {
+        torque.into()
+    }
+
+    impl_bin!(BinGetCVP, 0x1A, ());
+
+    pub fn get_cvp() -> BinGetCVP {
+        ().into()
+    }
 }

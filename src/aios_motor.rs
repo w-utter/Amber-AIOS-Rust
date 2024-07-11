@@ -2,9 +2,10 @@ use crate::cmds;
 use crate::serde::*;
 use crate::socket::Socket;
 use nix::Result as Res;
+use os_socketaddr::OsSocketAddr;
 use serde::Deserialize;
 use serde_json::Value as JSVal;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 pub struct AiosMotor<const R: usize, const W: usize> {
     socket: Socket<R>,
@@ -67,6 +68,11 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         self.socket.addr()
     }
 
+    pub fn sock_addr(&self, port: u16) -> OsSocketAddr {
+        let socket_addr = SocketAddr::new(IpAddr::V4(self.addr()), port);
+        socket_addr.into()
+    }
+
     pub unsafe fn send_recv_parse<'a, C>(
         &'a mut self,
         cmd: &C,
@@ -80,8 +86,25 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(data)
     }
 
-    pub fn set_axis_state(&mut self, state: AxisState) -> Result<(), Err> {
-        let cmd = cmds::set_requested_state(state);
+    pub unsafe fn send_recv_parse_bin<'a, C>(&'a mut self, cmd: &C) -> Result<C::Return, Err>
+    where
+        C: cmds::binary::BinaryCommand<'a>,
+        <C as cmds::binary::BinaryCommand<'a>>::Return: Deserialize<'a> + 'a,
+    {
+        let bytes = cmd.serialize(&mut self.write_buf);
+        self.socket.send_raw(bytes, C::PORT)?;
+        let ret = self.socket.recv_raw()?;
+        let parsed = <C as cmds::binary::BinaryCommand<'a>>::parse_return(ret);
+        Ok(parsed)
+    }
+
+    pub unsafe fn send_recv_bin<'a>(&'a mut self, bytes: &[u8], port: u16) -> Result<&'a [u8], Err> {
+        self.socket.send_raw(bytes, port)?;
+        Ok(self.socket.recv_raw()?)
+    }
+
+    pub fn set_axis_state<const MN: u8>(&mut self, state: AxisState) -> Result<(), Err> {
+        let cmd = cmds::set_requested_state::<MN>(state);
         let data = unsafe { self.send_recv_parse(&cmd)? };
         let ret_state: AxisState = data.data.current_state.into();
 
@@ -91,29 +114,29 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(())
     }
 
-    pub fn enable(&mut self) -> Result<(), Err> {
-        self.set_axis_state(AxisState::Enable)
+    pub fn enable<const MN: u8>(&mut self) -> Result<(), Err> {
+        self.set_axis_state::<MN>(AxisState::Enable)
     }
 
-    pub fn disable(&mut self) -> Result<(), Err> {
-        self.set_axis_state(AxisState::Idle)
+    pub fn disable<const MN: u8>(&mut self) -> Result<(), Err> {
+        self.set_axis_state::<MN>(AxisState::Idle)
     }
 
-    pub fn is_encoder_ready(&mut self) -> Result<bool, Err> {
-        let cmd = cmds::encoder_is_ready();
+    pub fn is_encoder_ready<const MN: u8>(&mut self) -> Result<bool, Err> {
+        let cmd = cmds::encoder_is_ready::<MN>();
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data.property)
     }
 
-    pub fn initalize(&mut self) -> Result<(), Err> {
-        while !self.is_encoder_ready()? {}
+    pub fn initalize<const MN: u8>(&mut self) -> Result<(), Err> {
+        while !self.is_encoder_ready::<MN>()? {}
 
-        self.enable()?;
+        self.enable::<MN>()?;
         Ok(())
     }
 
-    pub fn shutdown(&mut self) -> Result<(), Err> {
-        self.disable()
+    pub fn shutdown<const MN: u8>(&mut self) -> Result<(), Err> {
+        self.disable::<MN>()
     }
     //NOTE: i would not use this unless absolutely necessary
     pub fn reboot(&mut self) -> Result<(), Err> {
@@ -138,84 +161,107 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(())
     }
 
-    pub fn get_state(&mut self) -> Result<RequestedState, Err> {
-        let cmd = cmds::get_requested_state();
+    pub fn get_state<const MN: u8>(&mut self) -> Result<RequestedState, Err> {
+        let cmd = cmds::get_requested_state::<MN>();
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
-    pub fn set_control_mode(&mut self, control_mode: ControlMode) -> Result<(), Err> {
-        let cmd = cmds::set_control_mode(control_mode);
+    pub fn set_control_mode<const MN: u8>(&mut self, control_mode: ControlMode) -> Result<(), Err> {
+        let cmd = cmds::set_control_mode::<MN>(control_mode);
 
         let _ = unsafe { self.send_recv_parse(&cmd)? };
         Ok(())
     }
 
-    pub fn set_linear_count(&mut self, linear_count: u8) -> Result<(), Err> {
-        let cmd = cmds::set_linear_count(linear_count);
+    pub fn set_linear_count<const MN: u8>(&mut self, linear_count: u8) -> Result<(), Err> {
+        let cmd = cmds::set_linear_count::<MN>(linear_count);
 
         let _ = unsafe { self.send_recv_parse(&cmd)? };
         Ok(())
     }
 
-    pub fn current_velocity_position(&mut self) -> Result<CVP, Err> {
-        let cmd = cmds::cvp();
+    pub fn current_velocity_position<const MN: u8>(&mut self) -> Result<CVP, Err> {
+        let cmd = cmds::cvp::<MN>();
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
-    pub fn controller_config(&mut self) -> Result<ControllerConfig, Err> {
-        let cmd = cmds::get_controller_config();
+    pub fn controller_config<const MN: u8>(&mut self) -> Result<ControllerConfig, Err> {
+        let cmd = cmds::get_controller_config::<MN>();
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data.into())
     }
 
-    pub fn err(&mut self) -> Result<MotorError, Err> {
-        let cmd = cmds::get_err();
+    pub fn set_controller_motion_config<const MN: u8>(
+        &mut self,
+        pos_gain: f64,
+        vel_gain: f64,
+        vel_integrator_gain: f64,
+        vel_limit: f64,
+        vel_limit_tolerance: f64,
+    ) -> Result<(), Err> {
+        let cmd = cmds::set_motion_control_config::<MN>(
+            pos_gain,
+            vel_gain,
+            vel_integrator_gain,
+            vel_limit,
+            vel_limit_tolerance,
+        );
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(())
+    }
+
+    pub fn err<const MN: u8>(&mut self) -> Result<MotorError, Err> {
+        let cmd = cmds::get_err::<MN>();
         let data = unsafe { self.send_recv_parse(&cmd)? };
         let data: MotorError = data.data.into();
         Ok(data)
     }
 
-    pub fn clear_err(&mut self) -> Result<MotorError, Err> {
-        let cmd = cmds::clear_err();
+    pub fn clear_err<const MN: u8>(&mut self) -> Result<MotorError, Err> {
+        let cmd = cmds::clear_err::<MN>();
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         let data: MotorError = data.data.into();
         Ok(data)
     }
 
-    pub fn set_velocity(&mut self, velocity: f64, current_ff: f64) -> Result<CVP, Err> {
-        let cmd = cmds::set_velocity(velocity, current_ff);
+    pub fn set_velocity<const MN: u8>(
+        &mut self,
+        velocity: f64,
+        current_ff: f64,
+    ) -> Result<CVP, Err> {
+        let cmd = cmds::set_velocity::<MN>(velocity, current_ff);
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
-    pub fn set_position(
+    pub fn set_position<const MN: u8>(
         &mut self,
         position: f64,
         velocity: f64,
         current_ff: f64,
     ) -> Result<CVP, Err> {
-        let cmd = cmds::set_position(position, velocity, current_ff);
+        let cmd = cmds::set_position::<MN>(position, velocity, current_ff);
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
-    pub fn set_current(&mut self, current: f64) -> Result<CVP, Err> {
-        let cmd = cmds::set_current(current);
+    pub fn set_current<const MN: u8>(&mut self, current: f64) -> Result<CVP, Err> {
+        let cmd = cmds::set_current::<MN>(current);
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
-    pub fn idle(&mut self) -> Result<(), Err> {
-        let _ = self.set_velocity(0.0, 0.0)?;
+    pub fn idle<const MN: u8>(&mut self) -> Result<(), Err> {
+        let _ = self.set_velocity::<MN>(0.0, 0.0)?;
         Ok(())
     }
 
@@ -226,10 +272,22 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(data.data)
     }
 
-    //FIXME: theres also set, save, and erase config
-    //which have not been implemented
     pub fn get_root_config(&mut self) -> Result<RootConfig, Err> {
         let cmd = cmds::get_root_config();
+
+        let data = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn set_root_config(
+        &mut self,
+        dc_bus_overvoltage_trip_level: f64,
+        dc_bus_undervoltage_trip_level: f64,
+    ) -> Result<RootConfig, Err> {
+        let cmd = cmds::set_root_config(
+            dc_bus_overvoltage_trip_level,
+            dc_bus_undervoltage_trip_level,
+        );
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
@@ -242,22 +300,135 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(data.data)
     }
 
-    //FIXME: theres also a set motor config
-    //which has not been implemented
-    pub fn motor_config(&mut self) -> Result<MotorConfig, Err> {
-        let cmd = cmds::get_m1_motor_config();
+    pub fn set_network_settings(
+        &mut self,
+        ssid: &str,
+        password: &str,
+        name: &str,
+        settings: cmds::NetworkOptions,
+    ) -> Result<NetworkSettings, Err> {
+        let cmd = cmds::set_network_settings(ssid, password, name, settings);
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
     }
 
-    //FIXME: this also has a set
-    //which has not been implemented
-    pub fn trapezoidal_trajectory(&mut self) -> Result<TrapezoidalTrajectory, Err> {
-        let cmd = cmds::get_m1_trap_traj();
+    pub fn motor_config<const MN: u8>(&mut self) -> Result<MotorConfig, Err> {
+        let cmd = cmds::get_motor_config::<MN>();
 
         let data = unsafe { self.send_recv_parse(&cmd)? };
         Ok(data.data)
+    }
+
+    pub fn set_motor_config<const MN: u8>(
+        &mut self,
+        current_lim: f64,
+        current_lim_margin: f64,
+        inverter_temp_limit_lower: f64,
+        inverter_temp_limit_upper: f64,
+        requested_current_range: f64,
+        current_control_bandwidth: f64,
+    ) -> Result<MotorConfig, Err> {
+        let cmd = cmds::set_motor_config::<MN>(
+            current_lim,
+            current_lim_margin,
+            inverter_temp_limit_lower,
+            inverter_temp_limit_upper,
+            requested_current_range,
+            current_control_bandwidth,
+        );
+        let data = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn save_config(&mut self) -> Result<(), Err> {
+        let cmd = cmds::save_config();
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(())
+    }
+
+    pub fn erase_config(&mut self) -> Result<(), Err> {
+        let cmd = cmds::erase_config();
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(())
+    }
+
+    pub fn update_firmware(&mut self) -> Result<(), Err> {
+        let cmd = cmds::update_firmware();
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(())
+    }
+
+    pub fn trapezoidal_trajectory<const MN: u8>(&mut self) -> Result<TrapezoidalTrajectory, Err> {
+        let cmd = cmds::get_trap_traj::<MN>();
+
+        let data = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn set_trapezoidal_trajectory<const MN: u8>(
+        &mut self,
+        accel_lim: f64,
+        decel_lim: f64,
+        vel_lim: f64,
+    ) -> Result<TrapezoidalTrajectory, Err> {
+        let cmd = cmds::set_trap_traj::<MN>(accel_lim, decel_lim, vel_lim);
+        let data = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(data.data)
+    }
+
+    pub fn enable_velocity_ramp<const MN: u8>(&mut self, enable: bool) -> Result<(), Err> {
+        let cmd = cmds::enable_velocity_ramp::<MN>(enable);
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(())
+    }
+
+    pub fn target_velocity_ramp<const MN: u8>(&mut self, target_vel: f64) -> Result<(), Err> {
+        let cmd = cmds::target_velocity_ramp::<MN>(target_vel);
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(())
+    }
+
+    pub fn trapezoidal_move<const MN: u8>(&mut self, position: f64) -> Result<(), Err> {
+        let cmd = cmds::trapezoidal_move::<MN>(position);
+        let _ = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(())
+    }
+
+    pub fn encoder_info(&mut self) -> Result<EncoderInfo, Err> {
+        let cmd = cmds::get_encoder_info();
+        let info = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(info.data)
+    }
+
+    pub fn encoder_absolute_position(&mut self) -> Result<f64, Err> {
+        let cmd = cmds::absolute_encoder_position();
+        let pos = unsafe { self.send_recv_parse(&cmd)? };
+        Ok(pos.data.abs_pos)
+    }
+
+    pub fn set_input_position(&mut self, position: f32, velocity: i16, torque: i16) -> Result<CVP> {
+        let cmd = cmds::binary::set_input_position(position, velocity, torque);
+        let cvp = unsafe { self.send_recv_parse_bin(&cmd)? };
+        Ok(cvp.into())
+    }
+
+    pub fn set_input_velocity(&mut self, velocity: f32, torque: f32) -> Result<CVP, Err> {
+        let cmd = cmds::binary::set_input_velocity(velocity, torque);
+        let cvp = unsafe { self.send_recv_parse_bin(&cmd)? };
+        Ok(cvp.into())
+    }
+
+    pub fn set_input_torque(&mut self, torque: f32) -> Result<CVP, Err> {
+        let cmd = cmds::binary::set_input_torque(torque);
+        let cvp = unsafe { self.send_recv_parse_bin(&cmd)? };
+        Ok(cvp.into())
+    }
+
+    pub fn get_cvp(&mut self) -> Result<CVP, Err> {
+        let cmd = cmds::binary::get_cvp();
+        let cvp = unsafe { self.send_recv_parse_bin(&cmd)? };
+        Ok(cvp.into())
     }
 
     /// all this does is print out the response from the given endpoint and port
@@ -295,7 +466,8 @@ impl<const R: usize, const W: usize> std::os::fd::AsRawFd for AiosMotor<R, W> {
 
 impl<const R: usize, const W: usize> Drop for AiosMotor<R, W> {
     fn drop(&mut self) {
-        let _ = self.disable();
+        let _ = self.disable::<0>();
+        let _ = self.disable::<1>();
     }
 }
 

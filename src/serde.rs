@@ -139,6 +139,9 @@ impl_variant! {
     RootInfo,
     RequestedState,
     bool,
+    IoState,
+    EncoderInfo,
+    AbsEncoderPos,
 }
 
 impl_variant! {
@@ -153,6 +156,9 @@ impl_variant! {
     RootInfo<'_> => 8,
     RequestedState => 9,
     bool => 10,
+    IoState => 11,
+    EncoderInfo => 12,
+    AbsEncoderPos => 13,
 }
 
 impl<T> ReturnVariant for Property<T>
@@ -391,4 +397,22 @@ pub struct RootInfo<'a> {
     pub hw_version: &'a str,
     #[serde(rename(deserialize = "Fw_version"))]
     pub fw_version: &'a str,
+}
+
+//NOTE: idk what this means, its returning null for
+#[derive(Debug, Deserialize)]
+pub struct IoState {}
+
+#[derive(Debug, Deserialize)]
+pub struct EncoderInfo {
+    pub enc_calibrated: bool,
+    pub abs_offset: f64,
+    pub enc_resolution: f64,
+    //TODO: fork serde to make to support const generic impl for [T; N].
+    //pub offset_lut: [u8; 128],
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AbsEncoderPos {
+    pub abs_pos: f64,
 }
