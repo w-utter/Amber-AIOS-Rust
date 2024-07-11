@@ -39,7 +39,7 @@ macro_rules! impl_msg {
     };
 
     ($name:ident, $port:expr) => {
-        impl_msg!($name, $port, Empty<'readbuf>);
+        impl_msg!($name, $port, Empty);
     };
 }
 
@@ -573,10 +573,7 @@ pub mod binary {
         where
             Self: Sized;
 
-        unsafe fn parse_return(ret: &'a [u8]) -> Self::Return
-        where
-            Self: Sized,
-        {
+        unsafe fn parse_return(ret: &'a [u8]) -> Self::Return {
             let data = &ret[1..core::mem::size_of::<Self::Return>() + 1];
             bincode::DefaultOptions::new()
                 .with_little_endian()

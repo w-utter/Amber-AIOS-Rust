@@ -98,7 +98,11 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(parsed)
     }
 
-    pub unsafe fn send_recv_bin<'a>(&'a mut self, bytes: &[u8], port: u16) -> Result<&'a [u8], Err> {
+    pub unsafe fn send_recv_bin<'a>(
+        &'a mut self,
+        bytes: &[u8],
+        port: u16,
+    ) -> Result<&'a [u8], Err> {
         self.socket.send_raw(bytes, port)?;
         Ok(self.socket.recv_raw()?)
     }
@@ -407,7 +411,12 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(pos.data.abs_pos)
     }
 
-    pub fn set_input_position(&mut self, position: f32, velocity: i16, torque: i16) -> Result<CVP> {
+    pub fn set_input_position(
+        &mut self,
+        position: f32,
+        velocity: i16,
+        torque: i16,
+    ) -> Result<CVP, Err> {
         let cmd = cmds::binary::set_input_position(position, velocity, torque);
         let cvp = unsafe { self.send_recv_parse_bin(&cmd)? };
         Ok(cvp.into())

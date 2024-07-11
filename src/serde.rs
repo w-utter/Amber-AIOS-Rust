@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct Request<'a, T>
@@ -145,7 +145,7 @@ impl_variant! {
 }
 
 impl_variant! {
-    Empty<'_> => 0,
+    Empty => 0,
     CVP => 1,
     ControllerConfigRaw => 2,
     MotorErrorRaw<'_> => 3,
@@ -169,14 +169,14 @@ where
 }
 
 #[derive(Debug)]
-pub struct Empty<'a>(PhantomData<&'a ()>);
+pub struct Empty;
 
-impl<'a> Deserialize<'a> for Empty<'a> {
+impl<'a> Deserialize<'a> for Empty {
     fn deserialize<D>(_: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'a>,
     {
-        Ok(Empty(core::marker::PhantomData))
+        Ok(Empty)
     }
 }
 
