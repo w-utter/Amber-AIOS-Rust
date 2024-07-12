@@ -142,7 +142,13 @@ impl_variant! {
     IoState,
     EncoderInfo,
     AbsEncoderPos,
+    BinGetCVP,
+    SetInputPosition,
+    SetInputVelocity,
+    SetInputTorque,
 }
+
+use crate::cmds::binary::{BinGetCVP, SetInputVelocity, SetInputPosition, SetInputTorque, BinaryCommand};
 
 impl_variant! {
     Empty => 0,
@@ -159,6 +165,10 @@ impl_variant! {
     IoState => 11,
     EncoderInfo => 12,
     AbsEncoderPos => 13,
+    BinGetCVP => BinGetCVP::MSG_ID,
+    SetInputPosition => SetInputPosition::MSG_ID,
+    SetInputVelocity => SetInputVelocity::MSG_ID,
+    SetInputTorque => SetInputTorque::MSG_ID,
 }
 
 impl<T> ReturnVariant for Property<T>
