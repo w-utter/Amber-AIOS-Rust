@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct Request<'a, T>
