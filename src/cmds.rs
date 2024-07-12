@@ -603,7 +603,7 @@ pub mod binary {
                         .with_little_endian()
                         .serialize_into(writer, &self.inner)
                         .unwrap();
-                    &buf[..core::mem::size_of::<Self>()]
+                    &buf[..core::mem::size_of::<Self>() + 1]
                 }
             }
 
