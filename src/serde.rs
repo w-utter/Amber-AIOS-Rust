@@ -148,7 +148,9 @@ impl_variant! {
     SetInputTorque,
 }
 
-use crate::cmds::binary::{BinGetCVP, SetInputVelocity, SetInputPosition, SetInputTorque, BinaryCommand};
+use crate::cmds::binary::{
+    BinGetCVP, BinaryCommand, SetInputPosition, SetInputTorque, SetInputVelocity,
+};
 
 impl_variant! {
     Empty => 0,

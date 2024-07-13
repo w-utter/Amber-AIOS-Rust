@@ -36,6 +36,27 @@ macro_rules! impl_msg {
                 $name { inner }
             }
         }
+
+        impl<'readbuf> SerializableCommand<'readbuf> for $name {
+            const PORT: u16 = $port;
+            type Return = $out;
+            type Error = serde_json::Error;
+            const RETURN_VARIANT: u8 = <Self as Command<'readbuf>>::Return::VARIANT;
+
+            unsafe fn serialize<'b>(&self, buf: &'b mut [u8]) -> Result<&'b [u8], Self::Error>
+            where
+                Self: Sized,
+            {
+                crate::aios_motor::serialize_cmd(buf, self.cmd())
+            }
+
+            // NOTE: this removes the reqTarget from the request,
+            // but it's never really used other than for validation so its ok to drop it here
+            unsafe fn parse_return(ret: &'readbuf [u8]) -> Result<Self::Return, Self::Error> {
+                let req_ret = <Self as Command<'readbuf>>::parse_return(ret)?;
+                Ok(req_ret.data)
+            }
+        }
     };
 
     ($name:ident, $port:expr) => {
@@ -612,6 +633,24 @@ pub mod binary {
                     $name { inner: f }
                 }
             }
+
+            impl<'readbuf> super::SerializableCommand<'readbuf> for $name {
+                const PORT: u16 = PASSTHROUGH_PORT;
+                type Return = BinaryCVP;
+                type Error = std::convert::Infallible;
+                const RETURN_VARIANT: u8 = $id;
+
+                unsafe fn serialize<'b>(&self, buf: &'b mut [u8]) -> Result<&'b [u8], Self::Error>
+                where
+                    Self: Sized,
+                {
+                    Ok(<Self as BinaryCommand<'_>>::serialize(self, buf))
+                }
+
+                unsafe fn parse_return(ret: &'readbuf [u8]) -> Result<Self::Return, Self::Error> {
+                    Ok(<Self as BinaryCommand<'_>>::parse_return(ret))
+                }
+            }
         };
     }
 
@@ -679,4 +718,20 @@ pub mod binary {
     pub fn get_cvp() -> BinGetCVP {
         ().into()
     }
+}
+
+pub trait SerializableCommand<'readbuf>
+where
+    Self: 'readbuf,
+{
+    const PORT: u16;
+    type Return: serde::Deserialize<'readbuf>;
+    type Error: std::error::Error;
+    const RETURN_VARIANT: u8;
+
+    unsafe fn serialize<'b>(&self, buf: &'b mut [u8]) -> Result<&'b [u8], Self::Error>
+    where
+        Self: Sized;
+
+    unsafe fn parse_return(ret: &'readbuf [u8]) -> Result<Self::Return, Self::Error>;
 }

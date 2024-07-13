@@ -458,7 +458,10 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         serialize_cmd(&mut self.write_buf, val)
     }
 
-    pub fn serialize_bin_cmd<'a, 'b>(&'a mut self, val: &impl cmds::binary::BinaryCommand<'b>) -> &'a [u8] {
+    pub fn serialize_bin_cmd<'a, 'b>(
+        &'a mut self,
+        val: &impl cmds::binary::BinaryCommand<'b>,
+    ) -> &'a [u8] {
         unsafe { val.serialize(&mut self.write_buf) }
     }
 
@@ -502,7 +505,10 @@ pub enum Err {
     UnexpectedReturn,
 }
 
-fn serialize_cmd<'a>(buf: &'a mut [u8], val: &JSVal) -> Result<&'a [u8], serde_json::Error> {
+pub(crate) fn serialize_cmd<'a>(
+    buf: &'a mut [u8],
+    val: &JSVal,
+) -> Result<&'a [u8], serde_json::Error> {
     let writer = SerCounter::new(buf);
     use serde::Serialize;
     let mut ser = serde_json::Serializer::new(writer);

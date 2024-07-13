@@ -4,5 +4,4 @@ pub mod serde;
 pub mod socket;
 
 pub use aios_motor::*;
-pub use cmds::*;
 pub use serde::*;
