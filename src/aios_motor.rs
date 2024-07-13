@@ -465,7 +465,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         unsafe { val.serialize(&mut self.write_buf) }
     }
 
-    pub fn serilize_cmd<'a, C: cmds::SerializableCommand<'a>>(&'a mut self, cmd: &C) -> Result<&'a [u8], C::Error> {
+    pub fn serialize_cmd<'a, C: cmds::SerializableCommand<'a>>(&'a mut self, cmd: &C) -> Result<&'a [u8], C::Error> {
         unsafe {
             cmd.serialize(&mut self.write_buf)
         }
