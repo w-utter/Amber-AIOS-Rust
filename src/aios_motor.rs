@@ -454,7 +454,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(())
     }
 
-    pub fn serialize_cmd<'a>(&'a mut self, val: &JSVal) -> Result<&'a [u8], serde_json::Error> {
+    pub fn serialize_json_cmd<'a>(&'a mut self, val: &JSVal) -> Result<&'a [u8], serde_json::Error> {
         serialize_cmd(&mut self.write_buf, val)
     }
 
@@ -463,6 +463,12 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         val: &impl cmds::binary::BinaryCommand<'b>,
     ) -> &'a [u8] {
         unsafe { val.serialize(&mut self.write_buf) }
+    }
+
+    pub fn serilize_cmd<'a, C: cmds::SerializableCommand<'a>>(&'a mut self, cmd: &C) -> Result<&'a [u8], C::Error> {
+        unsafe {
+            cmd.serialize(&mut self.write_buf)
+        }
     }
 
     pub fn read_buf_mut(&mut self) -> &mut [u8] {
