@@ -51,12 +51,7 @@ where
                 let target = check_target(&mut map)?;
 
                 let de = MapAccessDeserializer::new(map);
-
-                let data = if core::mem::size_of::<V>() == 0 {
-                    todo!()
-                } else {
-                    V::deserialize(de)?
-                };
+                let data = V::deserialize(de)?;
 
                 Ok(Request { target, data })
             }
@@ -165,8 +160,8 @@ impl_variant! {
     RequestedState => 9,
     bool => 10,
     IoState => 11,
-    EncoderInfo => 12,
-    AbsEncoderPos => 13,
+    EncoderInfo => 15,
+    AbsEncoderPos => 16,
     BinGetCVP => BinGetCVP::MSG_ID,
     SetInputPosition => SetInputPosition::MSG_ID,
     SetInputVelocity => SetInputVelocity::MSG_ID,

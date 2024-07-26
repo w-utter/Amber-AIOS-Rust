@@ -12,31 +12,6 @@ pub struct AiosMotor<const R: usize, const W: usize> {
     write_buf: [u8; W],
 }
 
-struct SerCounter<'a> {
-    count: usize,
-    writer: std::io::BufWriter<&'a mut [u8]>,
-}
-
-impl<'a> SerCounter<'a> {
-    fn new(buf: &'a mut [u8]) -> Self {
-        let writer = std::io::BufWriter::new(buf);
-
-        Self { count: 0, writer }
-    }
-}
-
-impl<'a> std::io::Write for SerCounter<'a> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let len = self.writer.write(buf)?;
-        self.count += len;
-        Ok(len)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.writer.flush()
-    }
-}
-
 impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub const SERVICE_PORT: u16 = 2334;
     pub const DATA_PORT: u16 = 2333;
@@ -511,20 +486,17 @@ pub enum Err {
     UnexpectedReturn,
 }
 
-pub(crate) fn serialize_cmd<'a>(
-    buf: &'a mut [u8],
+pub(crate) fn serialize_cmd<'a, T: AsMut<[u8]> + Sized>(
+    buf: &'a mut T,
     val: &JSVal,
 ) -> Result<&'a [u8], serde_json::Error> {
-    let writer = SerCounter::new(buf);
+    let writer = sized_writer::SizedWriter::from_borrowed(buf);
     use serde::Serialize;
     let mut ser = serde_json::Serializer::new(writer);
 
     val.serialize(&mut ser)?;
 
-    let len = ser.into_inner().count;
-    let ptr = buf.as_ptr();
+    let writer = ser.into_inner();
 
-    let data = unsafe { core::slice::from_raw_parts(ptr, len) };
-
-    Ok(data)
+    Ok(writer.finish())
 }

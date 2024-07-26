@@ -43,7 +43,7 @@ macro_rules! impl_msg {
             type Error = serde_json::Error;
             const RETURN_VARIANT: u8 = <Self as Command<'readbuf>>::Return::VARIANT;
 
-            unsafe fn serialize<'b>(&self, buf: &'b mut [u8]) -> Result<&'b [u8], Self::Error>
+            unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(&self, buf: &'b mut T) -> Result<&'b [u8], Self::Error>
             where
                 Self: Sized,
             {
@@ -640,11 +640,11 @@ pub mod binary {
                 type Error = std::convert::Infallible;
                 const RETURN_VARIANT: u8 = $id;
 
-                unsafe fn serialize<'b>(&self, buf: &'b mut [u8]) -> Result<&'b [u8], Self::Error>
+                unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(&self, buf: &'b mut T) -> Result<&'b [u8], Self::Error>
                 where
                     Self: Sized,
                 {
-                    Ok(<Self as BinaryCommand<'_>>::serialize(self, buf))
+                    Ok(<Self as BinaryCommand<'_>>::serialize(self, buf.as_mut()))
                 }
 
                 unsafe fn parse_return(ret: &'readbuf [u8]) -> Result<Self::Return, Self::Error> {
@@ -729,7 +729,7 @@ where
     type Error: std::error::Error;
     const RETURN_VARIANT: u8;
 
-    unsafe fn serialize<'b>(&self, buf: &'b mut [u8]) -> Result<&'b [u8], Self::Error>
+    unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(&self, buf: &'b mut T) -> Result<&'b [u8], Self::Error>
     where
         Self: Sized;
 
