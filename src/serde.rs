@@ -69,6 +69,7 @@ where
     match map.next_entry::<&[u8], &[u8]>()? {
         Some((b"status", b"OK")) => Ok(()),
         Some((b"status", b"Not Found")) => Err("could not find endpoint").map_err(M::Error::custom),
+        Some((b"status", b"failed")) => Err("failed unexpectedly").map_err(M::Error::custom),
         o => {
             panic!("unexpected err {o:?}");
         }
