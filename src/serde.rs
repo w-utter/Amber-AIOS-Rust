@@ -69,9 +69,27 @@ where
     match map.next_entry::<&[u8], &[u8]>()? {
         Some((b"status", b"OK")) => Ok(()),
         Some((b"status", b"Not Found")) => Err("could not find endpoint").map_err(M::Error::custom),
-        Some((b"status", b"failed")) => Err("failed unexpectedly").map_err(M::Error::custom),
+        Some((b"status", b"Failed")) => Err("failed unexpectedly").map_err(M::Error::custom),
         o => {
-            panic!("unexpected err {o:?}");
+            if let Some((key, value)) = o {
+                let unexpected_key = String::from_utf8_lossy(key);
+                let unexpected_value = String::from_utf8_lossy(value);
+                let msg = format!("unexpected kv pair for status entry: `{unexpected_key}`: `{unexpected_value}`");
+
+                if cfg!(feature="debug") {
+                    panic!("{msg}");
+                } else {
+                    Err(msg).map_err(M::Error::custom)
+                }
+            } else {
+                let msg = "unexpected err, no kv pair for status entry";
+
+                if cfg!(feature="debug") {
+                    panic!("{msg}");
+                } else {
+                    Err(msg).map_err(M::Error::custom)
+                }
+            }
         }
     }
 }
