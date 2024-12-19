@@ -51,7 +51,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
     pub unsafe fn send_recv_parse<'a, C>(
         &'a mut self,
         cmd: &C,
-    ) -> Result<Request<<C as cmds::Command>::Return>, Err>
+    ) -> Result<Request<'a, <C as cmds::Command<'a>>::Return>, Err>
     where
         C: cmds::Command<'a>,
         <C as cmds::Command<'a>>::Return: Deserialize<'a> + 'a,
@@ -429,7 +429,10 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         Ok(())
     }
 
-    pub fn serialize_json_cmd<'a>(&'a mut self, val: &JSVal) -> Result<&'a [u8], serde_json::Error> {
+    pub fn serialize_json_cmd<'a>(
+        &'a mut self,
+        val: &JSVal,
+    ) -> Result<&'a [u8], serde_json::Error> {
         serialize_cmd(&mut self.write_buf, val)
     }
 
@@ -440,10 +443,11 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         unsafe { val.serialize(&mut self.write_buf) }
     }
 
-    pub fn serialize_cmd<'a, 'b, C: cmds::SerializableCommand<'b>>(&'a mut self, cmd: &C) -> Result<&'a [u8], C::Error> {
-        unsafe {
-            cmd.serialize(&mut self.write_buf)
-        }
+    pub fn serialize_cmd<'a, 'b, C: cmds::SerializableCommand<'b>>(
+        &'a mut self,
+        cmd: &C,
+    ) -> Result<&'a [u8], C::Error> {
+        unsafe { cmd.serialize(&mut self.write_buf) }
     }
 
     pub fn read_buf_mut(&mut self) -> &mut [u8] {

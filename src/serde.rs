@@ -74,9 +74,11 @@ where
             if let Some((key, value)) = o {
                 let unexpected_key = String::from_utf8_lossy(key);
                 let unexpected_value = String::from_utf8_lossy(value);
-                let msg = format!("unexpected kv pair for status entry: `{unexpected_key}`: `{unexpected_value}`");
+                let msg = format!(
+                    "unexpected kv pair for status entry: `{unexpected_key}`: `{unexpected_value}`"
+                );
 
-                if cfg!(feature="debug") {
+                if cfg!(feature = "debug") {
                     panic!("{msg}");
                 } else {
                     Err(msg).map_err(M::Error::custom)
@@ -84,7 +86,7 @@ where
             } else {
                 let msg = "unexpected err, no kv pair for status entry";
 
-                if cfg!(feature="debug") {
+                if cfg!(feature = "debug") {
                     panic!("{msg}");
                 } else {
                     Err(msg).map_err(M::Error::custom)

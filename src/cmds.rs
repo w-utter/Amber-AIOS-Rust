@@ -43,7 +43,10 @@ macro_rules! impl_msg {
             type Error = serde_json::Error;
             const RETURN_VARIANT: u8 = <Self as Command<'readbuf>>::Return::VARIANT;
 
-            unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(&self, buf: &'b mut T) -> Result<&'b [u8], Self::Error>
+            unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(
+                &self,
+                buf: &'b mut T,
+            ) -> Result<&'b [u8], Self::Error>
             where
                 Self: Sized,
             {
@@ -640,7 +643,10 @@ pub mod binary {
                 type Error = std::convert::Infallible;
                 const RETURN_VARIANT: u8 = $id;
 
-                unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(&self, buf: &'b mut T) -> Result<&'b [u8], Self::Error>
+                unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(
+                    &self,
+                    buf: &'b mut T,
+                ) -> Result<&'b [u8], Self::Error>
                 where
                     Self: Sized,
                 {
@@ -729,7 +735,10 @@ where
     type Error: std::error::Error;
     const RETURN_VARIANT: u8;
 
-    unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(&self, buf: &'b mut T) -> Result<&'b [u8], Self::Error>
+    unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(
+        &self,
+        buf: &'b mut T,
+    ) -> Result<&'b [u8], Self::Error>
     where
         Self: Sized;
 
