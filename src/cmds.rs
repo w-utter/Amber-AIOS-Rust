@@ -584,6 +584,20 @@ pub fn absolute_encoder_position() -> GetAbsEncoder {
 }
 
 pub mod binary {
+    #[derive(Debug)]
+    pub enum BinParseError {
+        Failed,
+        BadSize,
+        BadMsgId,
+    }
+
+    impl std::fmt::Display for BinParseError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            <Self as std::fmt::Debug>::fmt(self, f)
+        }
+    }
+
+    impl std::error::Error for BinParseError {}
 
     use bincode::Options;
     const PASSTHROUGH_PORT: u16 = 10000;
@@ -597,12 +611,20 @@ pub mod binary {
         where
             Self: Sized;
 
-        unsafe fn parse_return(ret: &'a [u8]) -> Self::Return {
+        fn parse_return(ret: &'a [u8]) -> Result<Self::Return, BinParseError> {
+            if ret == b"FAILED!" {
+                return Err(BinParseError::Failed);
+            } else if ret.len() < 1 + core::mem::size_of::<Self::Return>() {
+                return Err(BinParseError::BadSize);
+            } else if ret[0] != Self::MSG_ID {
+                return Err(BinParseError::BadMsgId);
+            }
+
             let data = &ret[1..core::mem::size_of::<Self::Return>() + 1];
-            bincode::DefaultOptions::new()
+            Ok(bincode::DefaultOptions::new()
                 .with_little_endian()
                 .deserialize(data)
-                .unwrap()
+                .unwrap())
         }
     }
 
@@ -640,7 +662,7 @@ pub mod binary {
             impl<'readbuf> super::SerializableCommand<'readbuf> for $name {
                 const PORT: u16 = PASSTHROUGH_PORT;
                 type Return = BinaryCVP;
-                type Error = std::convert::Infallible;
+                type Error = BinParseError;
                 const RETURN_VARIANT: u8 = $id;
 
                 unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(
@@ -654,7 +676,7 @@ pub mod binary {
                 }
 
                 unsafe fn parse_return(ret: &'readbuf [u8]) -> Result<Self::Return, Self::Error> {
-                    Ok(<Self as BinaryCommand<'_>>::parse_return(ret))
+                    <Self as BinaryCommand<'_>>::parse_return(ret)
                 }
             }
         };

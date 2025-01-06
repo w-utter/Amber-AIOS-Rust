@@ -69,7 +69,7 @@ impl<const R: usize, const W: usize> AiosMotor<R, W> {
         let bytes = cmd.serialize(&mut self.write_buf);
         self.socket.send_raw(bytes, C::PORT)?;
         let ret = self.socket.recv_raw()?;
-        let parsed = <C as cmds::binary::BinaryCommand<'a>>::parse_return(ret);
+        let parsed = <C as cmds::binary::BinaryCommand<'a>>::parse_return(ret)?;
         Ok(parsed)
     }
 
@@ -484,9 +484,18 @@ impl From<nix::Error> for Err {
     }
 }
 
+impl From<BinParseError> for Err {
+    fn from(err: BinParseError) -> Err {
+        Err::Binary(err)
+    }
+}
+
+use crate::cmds::binary::BinParseError;
+
 pub enum Err {
     Serde(serde_json::Error),
     Io(nix::Error),
+    Binary(BinParseError),
     UnexpectedReturn,
 }
 
