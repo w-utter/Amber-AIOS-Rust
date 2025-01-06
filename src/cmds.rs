@@ -612,9 +612,9 @@ pub mod binary {
             Self: Sized;
 
         fn parse_return(ret: &'a [u8]) -> Result<Self::Return, BinParseError> {
-            if ret == b"FAILED!" {
+            if ret == b"FAILED!\n" {
                 return Err(BinParseError::Failed);
-            } else if ret.len() < 1 + core::mem::size_of::<Self::Return>() {
+            } else if ret.len() != 1 + core::mem::size_of::<Self::Return>() {
                 return Err(BinParseError::BadSize);
             } else if ret[0] != Self::MSG_ID {
                 return Err(BinParseError::BadMsgId);
