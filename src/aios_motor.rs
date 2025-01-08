@@ -1,6 +1,8 @@
 use crate::cmds;
+use crate::err::Err;
 use crate::serde::*;
 use crate::socket::Socket;
+
 use nix::Result as Res;
 use os_socketaddr::OsSocketAddr;
 use serde::Deserialize;
@@ -470,33 +472,6 @@ impl<const R: usize, const W: usize> Drop for AiosMotor<R, W> {
         let _ = self.disable::<0>();
         let _ = self.disable::<1>();
     }
-}
-
-impl From<serde_json::Error> for Err {
-    fn from(err: serde_json::Error) -> Err {
-        Err::Serde(err)
-    }
-}
-
-impl From<nix::Error> for Err {
-    fn from(err: nix::Error) -> Err {
-        Err::Io(err)
-    }
-}
-
-impl From<BinParseError> for Err {
-    fn from(err: BinParseError) -> Err {
-        Err::Binary(err)
-    }
-}
-
-use crate::cmds::binary::BinParseError;
-
-pub enum Err {
-    Serde(serde_json::Error),
-    Io(nix::Error),
-    Binary(BinParseError),
-    UnexpectedReturn,
 }
 
 pub(crate) fn serialize_cmd<'a, T: AsMut<[u8]> + Sized>(

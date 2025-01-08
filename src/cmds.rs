@@ -584,21 +584,7 @@ pub fn absolute_encoder_position() -> GetAbsEncoder {
 }
 
 pub mod binary {
-    #[derive(Debug)]
-    pub enum BinParseError {
-        Failed,
-        BadSize,
-        BadMsgId,
-    }
-
-    impl std::fmt::Display for BinParseError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            <Self as std::fmt::Debug>::fmt(self, f)
-        }
-    }
-
-    impl std::error::Error for BinParseError {}
-
+    use crate::err::{binary, Expected};
     use bincode::Options;
     const PASSTHROUGH_PORT: u16 = 10000;
 
@@ -611,13 +597,16 @@ pub mod binary {
         where
             Self: Sized;
 
-        fn parse_return(ret: &'a [u8]) -> Result<Self::Return, BinParseError> {
+        fn parse_return(ret: &'a [u8]) -> Result<Self::Return, binary::Error> {
             if ret == b"FAILED!\n" {
-                return Err(BinParseError::Failed);
+                return Err(binary::Error::Failed);
             } else if ret.len() != 1 + core::mem::size_of::<Self::Return>() {
-                return Err(BinParseError::BadSize);
+                return Err(binary::Error::BadSize(Expected::new(
+                    ret.len(),
+                    core::mem::size_of::<Self::Return>() + 1,
+                )));
             } else if ret[0] != Self::MSG_ID {
-                return Err(BinParseError::BadMsgId);
+                return Err(binary::Error::BadMsgId(Expected::new(ret[0], Self::MSG_ID)));
             }
 
             let data = &ret[1..core::mem::size_of::<Self::Return>() + 1];
@@ -662,7 +651,7 @@ pub mod binary {
             impl<'readbuf> super::SerializableCommand<'readbuf> for $name {
                 const PORT: u16 = PASSTHROUGH_PORT;
                 type Return = BinaryCVP;
-                type Error = BinParseError;
+                type Error = binary::Error;
                 const RETURN_VARIANT: u8 = $id;
 
                 unsafe fn serialize<'b, T: AsMut<[u8]> + Sized>(
