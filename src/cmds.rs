@@ -600,7 +600,7 @@ pub mod binary {
         fn parse_return(ret: &'a [u8]) -> Result<Self::Return, binary::Error> {
             if ret == b"FAILED!\n" {
                 return Err(binary::Error::Failed);
-            } else if ret.len() != 1 + core::mem::size_of::<Self::Return>() {
+            } else if ret.len() < 1 + core::mem::size_of::<Self::Return>() {
                 return Err(binary::Error::BadSize(Expected::new(
                     ret.len(),
                     core::mem::size_of::<Self::Return>() + 1,
