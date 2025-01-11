@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::Value as JSVal;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-pub struct AiosMotor<const R: usize, const W: usize> {
+pub struct AiosMotor<const R: usize = W, const W: usize = 512> {
     socket: Socket<R>,
     write_buf: [u8; W],
 }
