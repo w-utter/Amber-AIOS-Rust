@@ -1,9 +1,18 @@
+#[derive(Debug)]
 pub enum Err {
     Serde(serde_json::Error),
     Io(nix::Error),
     Binary(binary::Error),
     UnexpectedReturn,
 }
+
+impl core::fmt::Display for Err {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        <Self as core::fmt::Debug>::fmt(self, f)
+    }
+}
+
+impl core::error::Error for Err { }
 
 impl From<serde_json::Error> for Err {
     fn from(err: serde_json::Error) -> Err {
