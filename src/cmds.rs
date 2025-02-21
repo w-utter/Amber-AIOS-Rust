@@ -578,7 +578,7 @@ pub mod binary {
     use bincode::Options;
     const PASSTHROUGH_PORT: u16 = 10000;
 
-    const CVP_ID: u8 = 0xFF;
+    const CVP_ID: u8 = 0xF0;
 
     pub trait BinaryCommand<'a> {
         const MSG_ID: u8;
