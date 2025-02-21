@@ -539,21 +539,11 @@ pub fn trapezoidal_move<const MOTOR_NUM: u8>(position: f64) -> TrapezoidalMove {
     .into()
 }
 
+//TODO: this is in 7DofArm/aios_python_example/aios.py
 /*
 impl_msg!(GetIOState, DATA_PORT, IoState);
 
-pub fn get_io_state() -> GetIOState {
-    json!({
-        "method": "GET",
-        "reqTarget": "/IO_State"
-    }).into()
-}
-
-impl_msg!(SetIOState, DATA_PORT, IoState);
-
-pub fn set_io_state() -> SetIOState {
-    json!({
-        "method": "SET",
+pub fn get_io_state() -> GetIOState 
         "reqTarget": "/IO_State",
         "PWM0_CH": 0,
         "PWM1_CH": 0,
@@ -587,6 +577,8 @@ pub mod binary {
     use crate::err::{binary, Expected};
     use bincode::Options;
     const PASSTHROUGH_PORT: u16 = 10000;
+
+    const CVP_ID: u8 = 0xFF;
 
     pub trait BinaryCommand<'a> {
         const MSG_ID: u8;
@@ -702,7 +694,7 @@ pub mod binary {
         torque: i16,
     }
 
-    impl_bin!(SetInputPosition, 0x0C, InputPosition);
+    impl_bin!(SetInputPosition, CVP_ID, InputPosition);
 
     pub fn set_input_position(position: f32, velocity: i16, torque: i16) -> SetInputPosition {
         InputPosition {
@@ -718,19 +710,19 @@ pub mod binary {
         velocity: f32,
         torque: f32,
     }
-    impl_bin!(SetInputVelocity, 0x0D, InputVelocity);
+    impl_bin!(SetInputVelocity, CVP_ID, InputVelocity);
 
     pub fn set_input_velocity(velocity: f32, torque: f32) -> SetInputVelocity {
         InputVelocity { velocity, torque }.into()
     }
 
-    impl_bin!(SetInputTorque, 0x0E, f32);
+    impl_bin!(SetInputTorque, CVP_ID, f32);
 
     pub fn set_input_torque(torque: f32) -> SetInputTorque {
         torque.into()
     }
 
-    impl_bin!(BinGetCVP, 0x1A, ());
+    impl_bin!(BinGetCVP, CVP_ID, ());
 
     pub fn get_cvp() -> BinGetCVP {
         ().into()
