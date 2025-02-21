@@ -597,9 +597,13 @@ pub mod binary {
                     ret.len(),
                     core::mem::size_of::<Self::Return>() + 1,
                 )));
-            } else if ret[0] != Self::MSG_ID {
+            } 
+
+            /*
+            else if ret[0] != Self::MSG_ID {
                 return Err(binary::Error::BadMsgId(Expected::new(ret[0], Self::MSG_ID)));
             }
+            */
 
             let data = &ret[1..core::mem::size_of::<Self::Return>() + 1];
             Ok(bincode::DefaultOptions::new()
