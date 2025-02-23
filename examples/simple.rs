@@ -5,17 +5,26 @@ use serde_json::json;
 use std::time::Duration;
 
 fn main() {
-
-    let mut sock = Socket::<2048>::new(192, 168, 1, 50).unwrap();
-    sock.set_read_timeout(Duration::from_millis(20)).unwrap();
+    let mut sock = Socket::<2048>::new(192, 168, 1, 31).unwrap();
+    sock.set_read_timeout(Duration::from_millis(2000)).unwrap();
 
     let mut motor = AiosMotor::<2048>::from_socket(sock);
 
+    motor.enable::<1>();
 
     loop {
-        if let Ok(cvp) = motor.get_network_settings() {
-            println!("{cvp:?}");
+        match motor.get_cvp() {
+            Ok(cvp) => {
+                println!("{cvp:?}");
+            }
+            Err(e) => {
+                println!("err: {e:?}");
+            }
         }
+
+        if let Ok(cvp) = motor.get_cvp() {
+        }
+        println!("looping")
     }
 
     /*

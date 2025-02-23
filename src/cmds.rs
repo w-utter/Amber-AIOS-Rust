@@ -698,7 +698,7 @@ pub mod binary {
         torque: i16,
     }
 
-    impl_bin!(SetInputPosition, CVP_ID, InputPosition);
+    impl_bin!(SetInputPosition, 0x0C, InputPosition);
 
     pub fn set_input_position(position: f32, velocity: i16, torque: i16) -> SetInputPosition {
         InputPosition {
@@ -714,19 +714,19 @@ pub mod binary {
         velocity: f32,
         torque: f32,
     }
-    impl_bin!(SetInputVelocity, CVP_ID, InputVelocity);
+    impl_bin!(SetInputVelocity, 0x0D, InputVelocity);
 
     pub fn set_input_velocity(velocity: f32, torque: f32) -> SetInputVelocity {
         InputVelocity { velocity, torque }.into()
     }
 
-    impl_bin!(SetInputTorque, CVP_ID, f32);
+    impl_bin!(SetInputTorque, 0x0E, f32);
 
     pub fn set_input_torque(torque: f32) -> SetInputTorque {
         torque.into()
     }
 
-    impl_bin!(BinGetCVP, CVP_ID, ());
+    impl_bin!(BinGetCVP, 0x1A, ());
 
     pub fn get_cvp() -> BinGetCVP {
         ().into()
